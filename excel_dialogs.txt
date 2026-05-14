@@ -1,0 +1,232 @@
+import pandas as pd
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+                             QTableWidget, QTableWidgetItem, QPushButton,
+                             QHeaderView, QFileDialog, QMessageBox, QApplication)
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor
+
+from gui import DISPLAY_NAMES, InteractiveTableWidget
+
+
+class ImportInfoDialog(QDialog):
+    """Okno pokazujące tabelę wymogów do importu z Excela oraz generujące szablon."""
+
+    def __init__(self, parent, section, db_cols, unique_keys):
+        super().__init__(parent)
+        self.section = section
+        self.db_cols = db_cols
+        self.unique_keys = unique_keys
+
+        self.setWindowTitle(f"Informacja o imporcie - {section}")
+        self.setFixedSize(500, 450)
+
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+
+        lbl = QLabel(
+            f"Aby zaimportować dane do sekcji <b>{self.section}</b>, przygotuj plik Excel<br>"
+            f"zawierający w pierwszym wierszu (jako nagłówki) poniższe nazwy kolumn:"
+        )
+        lbl.setStyleSheet("font-size: 13px; background: transparent;")
+        layout.addWidget(lbl)
+
+        self.table = InteractiveTableWidget()
+        self.table.setColumnCount(2)
+        self.table.setHorizontalHeaderLabels(["Nagłówek w Excelu", "Wymagany do weryfikacji?"])
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
+        self.table.setRowCount(len(self.db_cols))
+        for i, col in enumerate(self.db_cols):
+            excel_col = col.lower().replace(" ", "_")
+            is_req = "TAK" if col in self.unique_keys or (
+                        self.section == "KONTA UŻYTKOWNIKÓW" and col == "NR KADROWY") else "NIE"
+
+            item_col = QTableWidgetItem(excel_col)
+            item_req = QTableWidgetItem(is_req)
+
+            if is_req == "TAK":
+                item_col.setForeground(QColor("red"))
+                item_req.setForeground(QColor("red"))
+                font = item_col.font()
+                font.setBold(True)
+                item_col.setFont(font)
+                item_req.setFont(font)
+
+            self.table.setItem(i, 0, item_col)
+            self.table.setItem(i, 1, item_req)
+
+        layout.addWidget(self.table)
+
+        btn_layout = QHBoxLayout()
+
+        btn_template = QPushButton("Pobierz szablon")
+        btn_template.setStyleSheet("background-color: #ffdcb8; font-weight: bold;")
+        btn_template.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_template.clicked.connect(self._generate_template)
+
+        btn_cancel = QPushButton("Anuluj")
+        btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_cancel.clicked.connect(self.reject)
+
+        btn_import = QPushButton("Wskaż plik Excel")
+        btn_import.setStyleSheet("background-color: lightblue; font-weight: bold;")
+        btn_import.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_import.clicked.connect(self.accept)
+
+        btn_layout.addWidget(btn_template)
+        btn_layout.addStretch()
+        btn_layout.addWidget(btn_cancel)
+        btn_layout.addWidget(btn_import)
+
+        layout.addLayout(btn_layout)
+
+    def _generate_template(self):
+        """Generuje i zapisuje pusty plik Excel z odpowiednimi nagłówkami."""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Zapisz szablon",
+            f"Szablon_Import_mSprzet_{self.section}.xlsx".replace(" ", "_"),
+            "Pliki Excel (*.xlsx)"
+        )
+
+        if file_path:
+            try:
+                # Zamieniamy kolumny bazy danych na format Excelowy (małe litery, podkreślniki)
+                excel_cols = [c.lower().replace(" ", "_") for c in self.db_cols]
+                df = pd.DataFrame(columns=excel_cols)
+                df.to_excel(file_path, index=False)
+                # Tu możemy zostawić komunikat sukcesu dla wygenerowanego pliku
+                QMessageBox.information(self, "Sukces", f"Szablon został zapisany pomyślnie:\n{file_path}")
+            except Exception as e:
+                QMessageBox.critical(self, "Błąd", f"Nie udało się wygenerować szablonu:\n{e}")
+
+
+class GenericExcelImportPreviewDialog(QDialog):
+    """Zunifikowany podgląd importu. Sprawdza dane sprzętu lub kont."""
+
+    def __init__(self, parent, dataframe, section, db_cols, existing_data, unique_keys):
+        super().__init__(parent)
+        self.setWindowTitle(f"Podgląd i Walidacja Importu - {section}")
+        self.setFixedSize(1100, 600)
+        self.setModal(True)
+
+        self.df = dataframe
+        self.section = section
+        self.db_cols = db_cols
+        self.existing_data = existing_data
+        self.unique_keys = unique_keys
+        self.valid_data_to_import = []
+        self.has_errors = False
+
+        self._build_ui()
+        self._validate()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+
+        lbl = QLabel(f"Weryfikacja danych z pliku Excel: {self.section}")
+        lbl.setStyleSheet("font-weight: bold; font-size: 14px; background: transparent;")
+        layout.addWidget(lbl)
+
+        self.table = InteractiveTableWidget()
+        headers = ["Status"] + [DISPLAY_NAMES.get(c, c).replace("\n", " ") for c in self.db_cols] + ["Szczegóły błędu"]
+        self.table.setColumnCount(len(headers))
+        self.table.setHorizontalHeaderLabels(headers)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        layout.addWidget(self.table)
+
+        self.btn_layout = QHBoxLayout()
+        self.info_lbl = QLabel()
+        self.info_lbl.setStyleSheet("background: transparent;")
+        self.btn_layout.addWidget(self.info_lbl)
+
+        self.btn_cancel = QPushButton("Anuluj / Zamknij")
+        self.btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_cancel.clicked.connect(self.reject)
+
+        self.btn_import = QPushButton("Zatwierdź i Importuj")
+        self.btn_import.setStyleSheet("background-color: lightgreen; font-weight: bold;")
+        self.btn_import.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_import.clicked.connect(self.accept)
+
+        self.btn_layout.addStretch()
+        self.btn_layout.addWidget(self.btn_cancel)
+        self.btn_layout.addWidget(self.btn_import)
+        layout.addLayout(self.btn_layout)
+
+    def _validate(self):
+        df_col_map = {str(c).lower().strip(): str(c) for c in self.df.columns}
+        expected_map = {c.lower().replace(" ", "_"): c for c in self.db_cols}
+
+        seen_in_excel = {k: set() for k in self.unique_keys}
+        green_bg, red_bg = QColor("#d4edda"), QColor("#f8d7da")
+
+        self.table.setRowCount(len(self.df))
+        for index, row in self.df.iterrows():
+            row_data_dict = {}
+            status, reason, bg_color = "OK", "", green_bg
+
+            for excel_col_key, db_col in expected_map.items():
+                val = ""
+                if excel_col_key in df_col_map:
+                    val = str(row.get(df_col_map[excel_col_key], "")).strip()
+                    if val.lower() == "nan": val = ""
+                row_data_dict[db_col] = val
+
+            if "STATUS" in self.db_cols and not row_data_dict.get("STATUS"):
+                row_data_dict["STATUS"] = "W magazynie"
+
+            for u_key in self.unique_keys:
+                val = row_data_dict.get(u_key, "")
+                if not val:
+                    continue
+                val_upper = val.upper()
+                if val_upper in self.existing_data.get(u_key, set()):
+                    status, reason, bg_color, self.has_errors = "BŁĄD", f"{DISPLAY_NAMES.get(u_key, u_key).replace(chr(10), ' ')} istnieje w bazie", red_bg, True
+                    break
+                if val_upper in seen_in_excel[u_key]:
+                    status, reason, bg_color, self.has_errors = "BŁĄD", f"Zduplikowany {DISPLAY_NAMES.get(u_key, u_key).replace(chr(10), ' ')} w pliku", red_bg, True
+                    break
+                seen_in_excel[u_key].add(val_upper)
+
+            if self.section == "KONTA UŻYTKOWNIKÓW" and not row_data_dict.get("NR KADROWY"):
+                status, reason, bg_color, self.has_errors = "BŁĄD", "Brak numeru kadrowego", red_bg, True
+            elif self.section == "LAPTOPY" and not row_data_dict.get("NR SERYJNY") and not row_data_dict.get(
+                    "NR SRODKA TRWALEGO"):
+                status, reason, bg_color, self.has_errors = "BŁĄD", "Brak Numeru Seryjnego lub Środka Trw.", red_bg, True
+            elif self.section in ("MONITORY", "SŁUCHAWKI") and not row_data_dict.get("NR SERYJNY"):
+                status, reason, bg_color, self.has_errors = "BŁĄD", "Brak Numeru Seryjnego", red_bg, True
+            elif self.section == "TELEFONY" and not row_data_dict.get("IMEI") and not row_data_dict.get("NR TELEFONU"):
+                status, reason, bg_color, self.has_errors = "BŁĄD", "Brak IMEI lub Numeru Telefonu", red_bg, True
+            elif self.section == "KARTY SIM" and not row_data_dict.get("NR TELEFONU") and not row_data_dict.get(
+                    "NR SIM"):
+                status, reason, bg_color, self.has_errors = "BŁĄD", "Brak Nr Telefonu lub Nr SIM", red_bg, True
+            elif self.section == "ROUTER" and not row_data_dict.get("IMEI") and not row_data_dict.get("NR SIM"):
+                status, reason, bg_color, self.has_errors = "BŁĄD", "Brak IMEI lub Nr SIM", red_bg, True
+
+            if status == "OK":
+                self.valid_data_to_import.append(row_data_dict)
+
+            table_row = [status] + [row_data_dict[c] for c in self.db_cols] + [reason]
+            for c_idx, v in enumerate(table_row):
+                item = QTableWidgetItem(str(v))
+                item.setBackground(bg_color)
+                item.setForeground(QColor("black"))
+                self.table.setItem(index, c_idx, item)
+
+        if self.has_errors:
+            self.info_lbl.setText("⚠ Wykryto błędy (wiersze na czerwono). Import zablokowany.")
+            self.info_lbl.setStyleSheet("color: red; font-weight: bold; background: transparent;")
+            self.btn_import.setEnabled(False)
+            self.btn_import.setStyleSheet("background-color: lightgray; color: gray;")
+        else:
+            self.info_lbl.setText("✔ Wszystkie rekordy są poprawne.")
+            self.info_lbl.setStyleSheet("color: green; font-weight: bold; background: transparent;")
