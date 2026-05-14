@@ -1,0 +1,226 @@
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
+                             QTableWidget, QTableWidgetItem, QPushButton, QMessageBox,
+                             QHeaderView, QScrollArea, QFrame, QWidget)
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QFont, QFontMetrics
+
+from sprzet_queries import update_record
+
+
+class InteractiveTableWidget(QTableWidget):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.horizontalHeader().sectionResized.connect(self._adjust_header_font)
+
+    def mousePressEvent(self, event):
+        item = self.itemAt(event.pos())
+        if not item:
+            self.clearSelection()
+            self.clearFocus()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        # BLOKADA 1: Zapobiega zaznaczaniu wierszy poprzez przeciąganie kursorem
+        pass
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._adjust_header_font()
+
+    def _adjust_header_font(self, *args):
+        # BLOKADA 2: Płynne skalowanie czcionki, by zawsze była widoczna pełna nazwa
+        header = self.horizontalHeader()
+        if not header or header.count() == 0 or header.sectionSize(0) == 0:
+            return
+
+        font = QFont("Arial", 11, QFont.Weight.Bold)
+        best_size = 11
+        for size in range(11, 6, -1):
+            font.setPointSize(size)
+            fm = QFontMetrics(font)
+            fits = True
+            for i in range(header.count()):
+                text = self.model().headerData(i, Qt.Orientation.Horizontal)
+                if text:
+                    # Sprawdzamy czy dany tekst z lekkim marginesem mieści się w komórce
+                    if fm.horizontalAdvance(str(text)) + 12 > header.sectionSize(i):
+                        fits = False
+                        break
+            if fits:
+                best_size = size
+                break
+        else:
+            best_size = 7  # Minimalny dopuszczalny rozmiar czcionki
+
+        font.setPointSize(best_size)
+        header.setFont(font)
+
+
+class AssignmentDialog(QDialog):
+    def __init__(self, parent, title: str, user_data: dict, table_name: str, fetch_method, columns: list,
+                 on_assign_callback):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setFixedSize(1100, 600)
+        self.setModal(True)
+
+        self.user_data = user_data
+        self.table_name = table_name
+        self.fetch_method = fetch_method
+        self.columns = columns
+        self.on_assign_callback = on_assign_callback
+
+        self.all_data = []
+        self.filter_entries = {}
+        self.filter_boxes = {}
+
+        self.display_names = getattr(parent, 'DISPLAY_NAMES', {})
+
+        self._build_ui()
+        self._load_data()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+
+        user_info = f"Przypisujesz do: {self.user_data.get('IMIE', '')} {self.user_data.get('NAZWISKO', '')} ({self.user_data.get('NR KADROWY', '')})"
+        info_label = QLabel(user_info)
+        info_label.setStyleSheet("font-weight: bold; font-size: 14px; background: transparent;")
+        layout.addWidget(info_label)
+
+        self.filter_scroll = QScrollArea()
+        self.filter_scroll.setWidgetResizable(True)
+        self.filter_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.filter_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.filter_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.filter_scroll.setFixedHeight(50)
+
+        self.filter_container = QWidget()
+        self.filter_layout = QHBoxLayout(self.filter_container)
+        self.filter_layout.setSpacing(0)
+
+        for col in self.columns:
+            box = QWidget()
+            box_layout = QVBoxLayout(box)
+            box_layout.setContentsMargins(2, 0, 2, 0)
+            box_layout.setSpacing(2)
+
+            if col not in ("ID", "ID_UZYTKOWNIKA"):
+                lbl = QLabel(self.display_names.get(col, col))
+                lbl.setStyleSheet(
+                    "font-size: 10px; color: gray; font-weight: bold; background: transparent; border: none;")
+                box_layout.addWidget(lbl)
+
+                entry = QLineEdit()
+                entry.textChanged.connect(self._apply_filters)
+                self.filter_entries[col] = entry
+                box_layout.addWidget(entry)
+            else:
+                box_layout.addStretch()
+
+            self.filter_layout.addWidget(box)
+            self.filter_boxes[col] = box
+
+        self.filter_layout.addStretch()
+        self.filter_scroll.setWidget(self.filter_container)
+        layout.addWidget(self.filter_scroll)
+
+        self.table = InteractiveTableWidget()
+        self.table.setColumnCount(len(self.columns))
+        self.table.setHorizontalHeaderLabels([self.display_names.get(c, c) for c in self.columns])
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+
+        for i, col_name in enumerate(self.columns):
+            if col_name in ("ID", "ID_UZYTKOWNIKA"):
+                self.table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
+
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
+        self.filter_layout.setContentsMargins(self.table.frameWidth(), 0, 0, 0)
+        layout.addWidget(self.table)
+
+        btn_layout = QHBoxLayout()
+        assign_btn = QPushButton("Przypisz wybrany")
+        assign_btn.setStyleSheet("background-color: lightgreen; font-weight: bold;")
+        assign_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        assign_btn.clicked.connect(self._assign_selected)
+
+        add_btn = QPushButton("Dodaj nowy do bazy (i przypisz)")
+        add_btn.setStyleSheet("background-color: #87CEFA;")
+        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        add_btn.clicked.connect(self._add_new)
+
+        btn_layout.addWidget(assign_btn)
+        btn_layout.addWidget(add_btn)
+        layout.addLayout(btn_layout)
+
+        self.table.horizontalHeader().sectionResized.connect(self._sync_filter_widths)
+        self.table.horizontalHeader().geometriesChanged.connect(self._sync_filter_widths)
+        self.table.horizontalScrollBar().valueChanged.connect(self.filter_scroll.horizontalScrollBar().setValue)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        QTimer.singleShot(10, self._sync_filter_widths)
+
+    def _sync_filter_widths(self, *args):
+        if not hasattr(self, 'table'): return
+        for i, col in enumerate(self.columns):
+            if col in self.filter_boxes:
+                self.filter_boxes[col].setFixedWidth(self.table.columnWidth(i))
+
+    def _load_data(self):
+        try:
+            self.all_data = self.fetch_method()
+            self.table.setRowCount(len(self.all_data))
+            for row_idx, row_data in enumerate(self.all_data):
+                for col_idx, val in enumerate(row_data):
+                    item = QTableWidgetItem(str(val) if val is not None else "")
+                    self.table.setItem(row_idx, col_idx, item)
+            self._apply_filters()
+            QTimer.singleShot(10, self._sync_filter_widths)
+        except Exception as e:
+            QMessageBox.critical(self, "Błąd", f"Nie udało się pobrać danych: {e}")
+
+    def _apply_filters(self):
+        filters = {col: entry.text().lower() for col, entry in self.filter_entries.items() if entry.text().strip()}
+        for row_idx in range(self.table.rowCount()):
+            match = True
+            for col_name, f_val in filters.items():
+                col_idx = self.columns.index(col_name)
+                item = self.table.item(row_idx, col_idx)
+                if item and f_val not in item.text().lower():
+                    match = False
+                    break
+            self.table.setRowHidden(row_idx, not match)
+
+    def _assign_selected(self):
+        selected_rows = self.table.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.information(self, "Błąd", "Wybierz sprzęt z listy.")
+            return
+
+        row_idx = selected_rows[0].row()
+        record_id_item = self.table.item(row_idx, len(self.columns) - 1)
+        if not record_id_item: return
+        record_id = int(record_id_item.text())
+
+        user_id = self.user_data.get('ID_UZYTKOWNIKA')
+        if not user_id:
+            QMessageBox.critical(self, "Błąd", "Brak ID użytkownika.")
+            return
+
+        try:
+            update_record(self.table_name, record_id, {"ID_UZYTKOWNIKA": user_id})
+            QMessageBox.information(self, "Sukces", "Sprzęt został przypisany.")
+            self.on_assign_callback()
+            self.accept()
+        except Exception as e:
+            QMessageBox.critical(self, "Błąd", f"Nie udało się przypisać sprzętu: {e}")
+
+    def _add_new(self):
+        QMessageBox.information(self, "Info",
+                                "Zostaniesz przeniesiony do standardowego okna DODAJ. Po dodaniu przypisz ręcznie.")
+        self.reject()

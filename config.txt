@@ -1,0 +1,41 @@
+# config.py — Centralna konfiguracja aplikacji mSprzęt
+
+# === Połączenie z bazą danych ===
+# Zmień poniższe wartości jeśli serwer lub baza danych ulegnie zmianie
+DB_SERVER = r"localhost\VSQLPL179ANA"
+DB_DATABASE = "BOTApp"
+DB_DRIVER = "SQL Server"
+
+DB_CONNECTION_STRING = (
+    f"Driver={{{DB_DRIVER}}};"
+    f"Server={DB_SERVER};"
+    f"Database={DB_DATABASE};"
+    "Trusted_Connection=yes;"
+    "autocommit=True;"
+)
+
+# === Schemat bazy danych ===
+# Prefiks tabel: [Korytko].[LODZCD\JN12504].[nazwa_tabeli]
+DB_SCHEMA = r"[Korytko].[LODZCD\JN12504]"
+
+# === Tabele ===
+TABLE_LAPTOPY       = f"{DB_SCHEMA}.[mSPRZET_LAPTOPY]"
+TABLE_MONITORY      = f"{DB_SCHEMA}.[mSPRZET_MONITORY]"
+TABLE_TELEFONY      = f"{DB_SCHEMA}.[mSPRZET_TELEFONY]"
+TABLE_SLUCHAWKI     = f"{DB_SCHEMA}.[mSPRZET_SLUCHAWKI]"
+TABLE_KARTY_SIM     = f"{DB_SCHEMA}.[mSPRZET_KARTY_SIM]"
+TABLE_ROUTER        = f"{DB_SCHEMA}.[mSPRZET_ROUTER]"
+TABLE_MYSZKI        = f"{DB_SCHEMA}.[mSPRZET_MYSZKI]"
+TABLE_KLAWIATURY    = f"{DB_SCHEMA}.[mSPRZET_KLAWIATURY]"
+TABLE_UZYTKOWNICY   = f"{DB_SCHEMA}.[mSPRZET_KONTA_UZYTKOWNIKOW]"
+TABLE_STATUSY       = f"{DB_SCHEMA}.[mSPRZET_STATUSY]"
+TABLE_MODEL_LAPTOPA = f"{DB_SCHEMA}.[mSPRZET_MODEL_LAPTOPA]"
+TABLE_MODEL_TELEFONU= f"{DB_SCHEMA}.[mSPRZET_MODEL_TELEFONU]"
+TABLE_OPERATORZY    = f"{DB_SCHEMA}.[mSPRZET_OPERATORZY_KOMORKOWI]"
+TABLE_STATUSY_ZATRUDNIENIE = f"{DB_SCHEMA}.[mSPRZET_STATUSY_RODZAJ_ZATRUDNIENIA]"
+TABLE_STATUSY_LOKALIZACJA  = f"{DB_SCHEMA}.[mSPRZET_STATUSY_LOKALIZACJA]"
+
+# === Aplikacja ===
+APP_TITLE   = "mSprzęt"
+APP_ICON    = "app.ico"
+APP_VERSION = "2.0.1"

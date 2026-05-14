@@ -1,0 +1,46 @@
+
+
+# database/connection.py
+"""
+Moduł zarządzający połączeniem z bazą danych SQL Server.
+Zastępuje funkcję create_connection() z końca pliku 3.py.
+"""
+
+import pyodbc
+from contextlib import contextmanager
+from config import DB_CONNECTION_STRING
+
+
+def create_connection() -> pyodbc.Connection:
+    """
+    Tworzy i zwraca połączenie z bazą danych.
+    Rzuca wyjątek pyodbc.Error jeśli połączenie się nie uda.
+    """
+    return pyodbc.connect(DB_CONNECTION_STRING)
+
+
+@contextmanager
+def get_connection():
+    """
+    Context manager do bezpiecznego zarządzania połączeniem.
+
+    Użycie:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT ...")
+
+    Automatycznie zamyka połączenie po wyjściu z bloku,
+    nawet jeśli wystąpi wyjątek.
+    """
+    conn = None
+    try:
+        conn = create_connection()
+        yield conn
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
