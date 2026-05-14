@@ -562,10 +562,19 @@ class UserEquipmentWidget(QScrollArea):
         except Exception:
             rows = []
 
+        # ZAMRAŻAMY GUI I SYGNAŁY na czas wstawiania danych sprzętu użytkownika
+        table.setUpdatesEnabled(False)
+        table.blockSignals(True)
+        table.setSortingEnabled(False)
+
         table.setRowCount(len(rows))
         for r_idx, row in enumerate(rows):
             for c_idx, val in enumerate(row):
                 table.setItem(r_idx, c_idx, QTableWidgetItem(str(val) if val is not None else ""))
+
+        # ODMRAŻAMY GUI
+        table.blockSignals(False)
+        table.setUpdatesEnabled(True)
 
         table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         table.customContextMenuRequested.connect(lambda pos, t=table: self.parent_app.show_context_menu(pos, t))
@@ -740,11 +749,23 @@ class SectionWidget(BackgroundWidget):
                 self.filter_boxes[col].setFixedWidth(self.table.columnWidth(i))
 
     def load_data(self):
+        # 1. Pobieramy najnowsze dane z bazy
         rows = self.fetch_method()
+
+        # 2. ZAMRAŻAMY GUI I SYGNAŁY (Przyspieszenie renderowania)
+        self.table.setUpdatesEnabled(False)
+        self.table.blockSignals(True)
+        self.table.setSortingEnabled(False)
+
+        # 3. Wstawianie danych do tabeli
         self.table.setRowCount(len(rows))
         for r_idx, row in enumerate(rows):
             for c_idx, val in enumerate(row):
                 self.table.setItem(r_idx, c_idx, QTableWidgetItem(str(val) if val is not None else ""))
+
+        # 4. ODMRAŻAMY GUI
+        self.table.blockSignals(False)
+        self.table.setUpdatesEnabled(True)
 
         self.update_count()
         QTimer.singleShot(10, self._sync_filter_widths)

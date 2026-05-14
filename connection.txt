@@ -1,22 +1,56 @@
-
-
-# database/connection.py
 """
-Moduł zarządzający połączeniem z bazą danych SQL Server.
-Zastępuje funkcję create_connection() z końca pliku 3.py.
+database/connection.py
+Moduł zarządzający połączeniem z bazą danych SQL Server z automatycznym wyborem sterownika.
 """
 
 import pyodbc
+import re
 from contextlib import contextmanager
-from config import DB_CONNECTION_STRING
+from config import DB_SERVER, DB_DATABASE
+
+
+def get_best_odbc_driver() -> str:
+    """
+    Wyszukuje i zwraca najnowszy zainstalowany sterownik ODBC dla SQL Server.
+    """
+    drivers = pyodbc.drivers()
+
+    # 1. Szukaj sterowników z serii "ODBC Driver XX for SQL Server" (najbardziej optymalne)
+    odbc_drivers = [d for d in drivers if re.match(r'^ODBC Driver \d+ for SQL Server$', d)]
+    if odbc_drivers:
+        # Sortuj malejąco po numerze wersji (np. 18, 17, 13)
+        odbc_drivers.sort(key=lambda x: int(re.search(r'\d+', x).group()), reverse=True)
+        return odbc_drivers[0]
+
+    # 2. Fallback: Starszy "SQL Server Native Client"
+    native_clients = [d for d in drivers if 'SQL Server Native Client' in d]
+    if native_clients:
+        native_clients.sort(reverse=True)
+        return native_clients[0]
+
+    # 3. Ostateczny fallback: Domyślny, najstarszy systemowy sterownik
+    if 'SQL Server' in drivers:
+        return 'SQL Server'
+
+    raise pyodbc.Error("Błąd: Brak zainstalowanego jakiegokolwiek sterownika ODBC dla SQL Server w systemie!")
 
 
 def create_connection() -> pyodbc.Connection:
     """
-    Tworzy i zwraca połączenie z bazą danych.
+    Tworzy i zwraca połączenie z bazą danych używając najlepszego dostępnego sterownika.
     Rzuca wyjątek pyodbc.Error jeśli połączenie się nie uda.
     """
-    return pyodbc.connect(DB_CONNECTION_STRING)
+    best_driver = get_best_odbc_driver()
+
+    conn_str = (
+        f"Driver={{{best_driver}}};"
+        f"Server={DB_SERVER};"
+        f"Database={DB_DATABASE};"
+        "Trusted_Connection=yes;"
+        "TrustServerCertificate=yes;"
+        "autocommit=True;"
+    )
+    return pyodbc.connect(conn_str)
 
 
 @contextmanager
@@ -29,8 +63,7 @@ def get_connection():
             cursor = conn.cursor()
             cursor.execute("SELECT ...")
 
-    Automatycznie zamyka połączenie po wyjściu z bloku,
-    nawet jeśli wystąpi wyjątek.
+    Automatycznie zamyka połączenie po wyjściu z bloku, nawet jeśli wystąpi wyjątek.
     """
     conn = None
     try:
@@ -42,5 +75,3 @@ def get_connection():
                 conn.close()
             except Exception:
                 pass
-
-

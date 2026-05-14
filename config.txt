@@ -4,15 +4,9 @@
 # Zmień poniższe wartości jeśli serwer lub baza danych ulegnie zmianie
 DB_SERVER = r"localhost\VSQLPL179ANA"
 DB_DATABASE = "BOTApp"
-DB_DRIVER = "SQL Server"
 
-DB_CONNECTION_STRING = (
-    f"Driver={{{DB_DRIVER}}};"
-    f"Server={DB_SERVER};"
-    f"Database={DB_DATABASE};"
-    "Trusted_Connection=yes;"
-    "autocommit=True;"
-)
+
+
 
 # === Schemat bazy danych ===
 # Prefiks tabel: [Korytko].[LODZCD\JN12504].[nazwa_tabeli]
