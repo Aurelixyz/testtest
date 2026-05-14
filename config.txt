@@ -6,12 +6,12 @@ DB_SERVER = r"localhost\VSQLPL179ANA"
 DB_DATABASE = "BOTApp"
 
 
-
+EMAIL_CC = "mail@test.pl;mail1@test.pl"
 
 # === Schemat bazy danych ===
 # Prefiks tabel: [Korytko].[LODZCD\JN12504].[nazwa_tabeli]
 DB_SCHEMA = r"[Korytko].[LODZCD\JN12504]"
-
+COMPANY_NAME = "FIRMA"
 # === Tabele ===
 TABLE_LAPTOPY       = f"{DB_SCHEMA}.[mSPRZET_LAPTOPY]"
 TABLE_MONITORY      = f"{DB_SCHEMA}.[mSPRZET_MONITORY]"

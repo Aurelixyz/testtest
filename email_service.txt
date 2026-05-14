@@ -13,7 +13,7 @@ import pygetwindow as gw
 import win32com.client as win32
 
 from connection import create_connection
-from config import DB_SCHEMA
+from config import DB_SCHEMA, EMAIL_CC
 
 
 # ─── Pobieranie danych o sprzecie uzytkownika ──────────────────────────────
@@ -112,6 +112,16 @@ def _bit_display(val) -> str:
 def build_email_body(user_data: dict, user_equipment: dict, column_descriptions: dict) -> str:
     """Buduje tresc HTML maila na podstawie danych uzytkownika i sprzetu."""
 
+    # Mapowanie nazw kolumn i sekcji na pełne polskie nazwy z polskimi znakami
+    pl_names = {
+        "SLUCHAWKI": "SŁUCHAWKI",
+        "IMIE": "IMIĘ",
+        "NR SRODKA TRWALEGO": "NR ŚRODKA TRWAŁEGO",
+        "LADOWARKA": "ŁADOWARKA",
+        "LADOWARKA INDUKCYJNA": "ŁADOWARKA INDUKCYJNA",
+        "PRZEJSCIOWKA DO TELEFONU": "PRZEJŚCIÓWKA DO TELEFONU"
+    }
+
     body = """
         <style>
             table { border: 1px solid black; border-collapse: collapse; }
@@ -120,20 +130,21 @@ def build_email_body(user_data: dict, user_equipment: dict, column_descriptions:
             th { background-color: #f2f2f2; }
             .red-bold { color: red; font-weight: bold; }
         </style>
-        <h2>Czesc,</h2>
-        <h2>Prosimy o dopilnowanie zwrotu ponizszego sprzetu.</h2>
-        <h2 class="red-bold">Przy odbiorze prosba o weryfikacje zgodnie z ponizszą listą.</h2>
-        <h2>Informacje o uzytkowniku:</h2>
+        <h2>Cześć,</h2>
+        <h2>Prosimy o dopilnowanie zwrotu poniższego sprzętu.</h2>
+        <h2 class="red-bold">Przy odbiorze prośba o weryfikację zgodnie z poniższą listą.</h2>
+        <h2>Informacje o użytkowniku:</h2>
         <ul>
     """
     for key, value in user_data.items():
-        body += f"<li><b>{key}:</b> {value}</li>"
+        disp_key = pl_names.get(key, key)
+        body += f"<li><b>{disp_key}:</b> {value}</li>"
     body += "</ul>"
 
-    body += "<h2>Sprzet:</h2>"
+    body += "<h2>Sprzęt:</h2>"
 
     for section, rows in user_equipment.items():
-        # Puste sekcje lub myszki/klawiatury z liczba 0 — pom
+        # Puste sekcje lub myszki/klawiatury z liczba 0 — pomijamy
         if not rows:
             continue
         if section in ("MYSZKI", "KLAWIATURY") and rows[0][0] == 0:
@@ -143,11 +154,13 @@ def build_email_body(user_data: dict, user_equipment: dict, column_descriptions:
         visible_cols = [c for c in cols if c not in _HIDDEN_COLS]
         col_indices = [cols.index(c) for c in visible_cols]
 
-        # Naglowek sekcji
-        body += f"<h3>{section}:</h3>"
+        # Nagłówek sekcji z polskimi znakami
+        disp_section = pl_names.get(section, section)
+        body += f"<h3>{disp_section}:</h3>"
         body += "<table><tr>"
         for col in visible_cols:
-            body += f'<th style="text-align:center;vertical-align:middle;">{col}</th>'
+            disp_col = pl_names.get(col, col)
+            body += f'<th style="text-align:center;vertical-align:middle;">{disp_col}</th>'
         body += "</tr>"
 
         for row in rows:
@@ -162,6 +175,9 @@ def build_email_body(user_data: dict, user_equipment: dict, column_descriptions:
         body += "</table>"
 
     return body
+
+
+
 
 
 # ─── Wysylanie / wyswietlanie maila przez Outlook ──────────────────────────
@@ -204,7 +220,7 @@ def send_email(email_body: str, user_data: dict, przelozony: str) -> None:
     mail.Subject = subject
     mail.HTMLBody = email_body
     mail.To = przelozony
-    mail.CC = "VO8m6;SfhMl"
+    mail.CC = EMAIL_CC
     mail.Display()
 
     # Krótkie opoznienie — czas na pojawienie sie okna
