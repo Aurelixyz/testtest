@@ -1,0 +1,214 @@
+
+"""
+services/email_service.py
+
+Logika wysylania maila z informacjami o sprzecie uzytkownika.
+Wydzielona z klasy Application (metody generate_user_email i send_email).
+"""
+
+import ctypes
+import time
+
+import pygetwindow as gw
+import win32com.client as win32
+
+from connection import create_connection
+from config import DB_SCHEMA
+
+
+# ─── Pobieranie danych o sprzecie uzytkownika ──────────────────────────────
+
+_SCHEMA = DB_SCHEMA
+_USERS  = f"{_SCHEMA}.[mSPRZET_KONTA_UZYTKOWNIKOW]"
+
+
+def get_user_equipment(user_id: str) -> tuple:
+    """
+    Pobiera wszystkie sprzety przypisane do uzytkownika.
+
+    Zwraca tuple: (user_equipment, column_descriptions, total_equipment, przelozony)
+      - user_equipment:      dict section -> list of rows
+      - column_descriptions: dict section -> list of column names
+      - total_equipment:     int, laczna liczba rekordow
+      - przelozony:          str, email/login przelozonego lub ''
+    """
+    conn = create_connection()
+    cursor = conn.cursor()
+
+    equipment_sections = [
+        "LAPTOPY", "MONITORY", "TELEFONY", "SLUCHAWKI",
+        "KARTY SIM", "ROUTER", "MYSZKI", "KLAWIATURY"
+    ]
+    user_equipment = {s: [] for s in equipment_sections}
+    column_descriptions = {}
+
+    queries = {
+        "LAPTOPY":    f"SELECT * FROM {_SCHEMA}.[mSPRZET_LAPTOPY]     WHERE [ID_UZYTKOWNIKA] = ?",
+        "MONITORY":   f"SELECT * FROM {_SCHEMA}.[mSPRZET_MONITORY]    WHERE [ID_UZYTKOWNIKA] = ?",
+        "TELEFONY":   f"SELECT * FROM {_SCHEMA}.[mSPRZET_TELEFONY]    WHERE [ID_UZYTKOWNIKA] = ?",
+        "SLUCHAWKI":  f"SELECT * FROM {_SCHEMA}.[mSPRZET_SLUCHAWKI]   WHERE [ID_UZYTKOWNIKA] = ?",
+        "KARTY SIM":  f"SELECT * FROM {_SCHEMA}.[mSPRZET_KARTY_SIM]   WHERE [ID_UZYTKOWNIKA] = ?",
+        "ROUTER":     f"SELECT * FROM {_SCHEMA}.[mSPRZET_ROUTER]       WHERE [ID_UZYTKOWNIKA] = ?",
+        "MYSZKI":     f"SELECT COUNT(*) as LICZBA FROM {_SCHEMA}.[mSPRZET_MYSZKI]    WHERE [ID_UZYTKOWNIKA] = ?",
+        "KLAWIATURY": f"SELECT COUNT(*) as LICZBA FROM {_SCHEMA}.[mSPRZET_KLAWIATURY] WHERE [ID_UZYTKOWNIKA] = ?",
+    }
+
+    for section, query in queries.items():
+        cursor.execute(query, (user_id,))
+        rows = cursor.fetchall()
+        if rows:
+            cols = [desc[0] for desc in cursor.description]
+            column_descriptions[section] = cols
+            user_equipment[section] = [list(row) for row in rows]
+
+    total_equipment = sum(
+        len(v) for k, v in user_equipment.items()
+        if k not in ("MYSZKI", "KLAWIATURY")
+    ) + sum(
+        (v[0][0] if v else 0)
+        for k, v in user_equipment.items()
+        if k in ("MYSZKI", "KLAWIATURY")
+    )
+
+    # Przelozony
+    cursor.execute(
+        f"""
+            SELECT TOP 1 ZATRUD.PrzelozonyLoginWindows
+            FROM BOTApp.dbo.p_V_DO_KonfiguracjaZatrudnienie AS ZATRUD
+            JOIN {_USERS} AS KONTA_MS
+                ON KONTA_MS.[NR KADROWY] = ZATRUD.LoginWindows
+            WHERE ZATRUD.Miesiac = MONTH(GETDATE())
+              AND ZATRUD.Rok     = YEAR(GETDATE())
+              AND KONTA_MS.[ID_UZYTKOWNIKA] = ?
+            """,
+        (user_id,)
+    )
+    result = cursor.fetchone()
+    przelozony = result[0] if result else ""
+
+    conn.close()
+    return user_equipment, column_descriptions, total_equipment, przelozony
+
+
+# ─── Budowanie treści HTML maila ────────────────────────────────────────────
+
+_HIDDEN_COLS = {"ID_UZYTKOWNIKA", "NR SDJ", "UWAGI", "STATUS", "ID"}
+
+# Kolumny bit (0/1) w TELEFONY wyswietlane jako znacznik
+_BIT_COLS_TELEFONY = {
+    "KABEL USB C", "LADOWARKA", "LADOWARKA INDUKCYJNA",
+    "PRZEJSCIOWKA DO TELEFONU", "ETUI",
+}
+
+
+def _bit_display(val) -> str:
+    if val == 1:
+        return "tak"
+    if val == 0:
+        return ""
+    return str(val) if val is not None else ""
+
+
+def build_email_body(user_data: dict, user_equipment: dict, column_descriptions: dict) -> str:
+    """Buduje tresc HTML maila na podstawie danych uzytkownika i sprzetu."""
+
+    body = """
+        <style>
+            table { border: 1px solid black; border-collapse: collapse; }
+            th, td { border: 1px solid black; padding: 5px;
+                     text-align: center; vertical-align: middle; }
+            th { background-color: #f2f2f2; }
+            .red-bold { color: red; font-weight: bold; }
+        </style>
+        <h2>Czesc,</h2>
+        <h2>Prosimy o dopilnowanie zwrotu ponizszego sprzetu.</h2>
+        <h2 class="red-bold">Przy odbiorze prosba o weryfikacje zgodnie z ponizszą listą.</h2>
+        <h2>Informacje o uzytkowniku:</h2>
+        <ul>
+    """
+    for key, value in user_data.items():
+        body += f"<li><b>{key}:</b> {value}</li>"
+    body += "</ul>"
+
+    body += "<h2>Sprzet:</h2>"
+
+    for section, rows in user_equipment.items():
+        # Puste sekcje lub myszki/klawiatury z liczba 0 — pom
+        if not rows:
+            continue
+        if section in ("MYSZKI", "KLAWIATURY") and rows[0][0] == 0:
+            continue
+
+        cols = column_descriptions.get(section, [])
+        visible_cols = [c for c in cols if c not in _HIDDEN_COLS]
+        col_indices = [cols.index(c) for c in visible_cols]
+
+        # Naglowek sekcji
+        body += f"<h3>{section}:</h3>"
+        body += "<table><tr>"
+        for col in visible_cols:
+            body += f'<th style="text-align:center;vertical-align:middle;">{col}</th>'
+        body += "</tr>"
+
+        for row in rows:
+            body += "<tr>"
+            for i, idx in enumerate(col_indices):
+                cell = row[idx]
+                col_name = visible_cols[i]
+                if section == "TELEFONY" and col_name in _BIT_COLS_TELEFONY:
+                    cell = _bit_display(cell)
+                body += f'<td style="text-align:center;vertical-align:middle;">{cell}</td>'
+            body += "</tr>"
+        body += "</table>"
+
+    return body
+
+
+# ─── Wysylanie / wyswietlanie maila przez Outlook ──────────────────────────
+
+def _bring_window_to_front(subject: str) -> None:
+    """Przenosi okno wiadomosci Outlooka na pierwszy plan."""
+    windows = gw.getWindowsWithTitle(subject)
+    for win in windows:
+        try:
+            win.activate()
+            hwnd = win._hWnd
+            for _ in range(2):
+                ctypes.windll.user32.SetForegroundWindow(hwnd)
+                ctypes.windll.user32.BringWindowToTop(hwnd)
+                ctypes.windll.user32.SetFocus(hwnd)
+            time.sleep(0.1)
+        except Exception:
+            pass
+
+
+def send_email(email_body: str, user_data: dict, przelozony: str) -> None:
+    """
+    Otwiera nowa wiadomosc Outlook z przygotowaną treścią.
+    Jesli taka wiadomosc juz istnieje — przenosi ją na pierwszy plan zamiast tworzyc nową.
+    """
+    imie = user_data.get("IMIE", "N/A")
+    nazwisko = user_data.get("NAZWISKO", "N/A")
+    nr_kadrowy = user_data.get("NR KADROWY", "N/A")
+    subject = f"Informacje o sprzecie: {imie} {nazwisko} {nr_kadrowy}"
+
+    # Jesli okno z takim tematem juz istnieje — aktywuj je
+    existing = gw.getWindowsWithTitle(subject)
+    if existing:
+        _bring_window_to_front(subject)
+        return
+
+    # Tworz nowa wiadomosc
+    outlook = win32.Dispatch("outlook.application")
+    mail = outlook.CreateItem(0)
+    mail.Subject = subject
+    mail.HTMLBody = email_body
+    mail.To = przelozony
+    mail.CC = "VO8m6;SfhMl"
+    mail.Display()
+
+    # Krótkie opoznienie — czas na pojawienie sie okna
+    time.sleep(0.4)
+    _bring_window_to_front(subject)
+
+

@@ -1,0 +1,635 @@
+"""
+database/queries/sprzet.py
+
+Warstwa danych (Data Access Layer) dla wszystkich sekcji sprzetu.
+Wszystkie zapytania SQL sa zebrane tutaj, oddzielone od warstwy GUI.
+
+Kazda funkcja get_* zwraca liste slownikow (lub list tupli) gotowych
+do wyswietlenia w Treeview.
+"""
+
+from connection import create_connection
+from config import DB_SCHEMA
+
+# Skrot dla czytelnosci - unikamy powtarzania pelnego schematu
+S = DB_SCHEMA
+U = f"{S}.[mSPRZET_KONTA_UZYTKOWNIKOW]"
+
+
+def insert_record(table: str, data: dict):
+    columns = ", ".join(f"[{key}]" for key in data.keys())
+    placeholders = ", ".join("?" for _ in data)
+    query = f"INSERT INTO {S}.[{table}] ({columns}) VALUES ({placeholders})"
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query, tuple(data.values()))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def update_record(table: str, record_id: int, data: dict):
+    # Wykrywamy, czy to tabela użytkowników, żeby użyć odpowiedniej nazwy kolumny ID
+    id_col = "[ID_UZYTKOWNIKA]" if table == "mSPRZET_KONTA_UZYTKOWNIKOW" else "[ID]"
+
+    set_clause = ", ".join(f"[{key}] = ?" for key in data.keys())
+    query = f"UPDATE {S}.[{table}] SET {set_clause} WHERE {id_col} = ?"
+
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query, tuple(data.values()) + (record_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_record_by_id(table: str, record_id: int):
+    """
+    Generyczna metoda do usuwania rekordu po ID.
+    Wspiera kolumne ID dla wszystkich tabel.
+    Dla tabeli uzytkownikow mozna uzyc tej samej logiki, jezeli pole nazywa sie ID (lub przekazac pole).
+    W MSprzet_Konta_Uzytkownikow pole nazywa sie ID_UZYTKOWNIKA, wiec sprawdzamy to.
+    """
+    id_col = "[ID_UZYTKOWNIKA]" if table == "mSPRZET_KONTA_UZYTKOWNIKOW" else "[ID]"
+    query = f"DELETE FROM {S}.[{table}] WHERE {id_col} = ?"
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query, (record_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def check_duplicate(table: str, conditions: list[tuple[str, str]]) -> bool:
+    """
+    Sprawdza, czy rekord o podanych parametrach juz istnieje.
+    conditions to lista krotek (column_name, value). Zwraca True, jesli istnieje.
+    Wymaga co najmniej jednego dopasowania (OR logic).
+    """
+    if not conditions:
+        return False
+
+    clauses = []
+    values = []
+    for col, val in conditions:
+        if val:
+            clauses.append(f"([{col}] = ? AND [{col}] IS NOT NULL AND [{col}] != '')")
+            values.append(val)
+
+    if not clauses:
+        return False
+
+    query = f"SELECT COUNT(*) FROM {S}.[{table}] WHERE " + " OR ".join(clauses)
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query, tuple(values))
+        return cursor.fetchone()[0] > 0
+    finally:
+        conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  LAPTOPY
+# ═══════════════════════════════════════════════════════════════
+
+LAPTOPY_COLUMNS = [
+    "NR KADROWY", "IMIE", "NAZWISKO", "STATUS",
+    "NR SRODKA TRWALEGO", "NAZWA LAPTOPA", "NR SERYJNY",
+    "MODEL", "NR SDJ", "UWAGI", "ID"
+]
+
+SQL_GET_LAPTOPY = f"""
+    SELECT b.[NR KADROWY], b.[IMIE], b.[NAZWISKO],
+           a.[STATUS], a.[NR SRODKA TRWALEGO], a.[NAZWA LAPTOPA],
+           a.[NR SERYJNY], a.[MODEL], a.[NR SDJ], a.[UWAGI], a.[ID]
+    FROM {S}.[mSPRZET_LAPTOPY] a
+    LEFT JOIN {U} b ON a.[ID_UZYTKOWNIKA] = b.[ID_UZYTKOWNIKA]
+"""
+
+SQL_GET_LAPTOPY_UZYTKOWNIKA = f"""
+    SELECT [STATUS], [NR SRODKA TRWALEGO], [NAZWA LAPTOPA],
+           [NR SERYJNY], [MODEL], [NR SDJ], [UWAGI], [ID_UZYTKOWNIKA], [ID]
+    FROM {S}.[mSPRZET_LAPTOPY]
+    WHERE [ID_UZYTKOWNIKA] = ?
+"""
+
+
+def get_all_laptopy() -> list:
+    """Zwraca wszystkie laptopy z danymi uzytkownika (LEFT JOIN)."""
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(SQL_GET_LAPTOPY)
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_laptopy_uzytkownika(user_id) -> list:
+    """Zwraca laptopy przypisane do konkretnego uzytkownika."""
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(SQL_GET_LAPTOPY_UZYTKOWNIKA, (user_id,))
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_statusy() -> list:
+    """Zwraca dostepne statusy."""
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT [STATUS] FROM {S}.[mSPRZET_STATUSY]")
+        return [row[0] for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_modele_laptopow() -> list:
+    """Zwraca dostepne modele laptopow."""
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"SELECT MODEL_LAPTOPA FROM {S}.[mSPRZET_MODEL_LAPTOPA] WHERE CZY_AKTYWNY = 1"
+        )
+        return [row[0] for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  MONITORY
+# ═══════════════════════════════════════════════════════════════
+
+MONITORY_COLUMNS = [
+    "NR KADROWY", "IMIE", "NAZWISKO", "STATUS",
+    "NR SERYJNY", "MODEL", "NR SDJ", "UWAGI", "ID"
+]
+
+SQL_GET_MONITORY = f"""
+    SELECT b.[NR KADROWY], b.[IMIE], b.[NAZWISKO],
+           a.[STATUS], a.[NR SERYJNY], a.[MODEL], a.[NR SDJ], a.[UWAGI], a.[ID]
+    FROM {S}.[mSPRZET_MONITORY] a
+    LEFT JOIN {U} b ON a.[ID_UZYTKOWNIKA] = b.[ID_UZYTKOWNIKA]
+"""
+
+SQL_GET_MONITORY_UZYTKOWNIKA = f"""
+    SELECT [STATUS], [NR SERYJNY], [MODEL], [NR SDJ], [UWAGI], [ID_UZYTKOWNIKA], [ID]
+    FROM {S}.[mSPRZET_MONITORY]
+    WHERE [ID_UZYTKOWNIKA] = ?
+"""
+
+
+def get_all_monitory() -> list:
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(SQL_GET_MONITORY)
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_monitory_uzytkownika(user_id) -> list:
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(SQL_GET_MONITORY_UZYTKOWNIKA, (user_id,))
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  TELEFONY
+# ═══════════════════════════════════════════════════════════════
+
+TELEFONY_COLUMNS = [
+    "NR KADROWY", "NAZWISKO", "STATUS", "IMEI", "LADOWARKA",
+    "KABEL USB C", "LADOWARKA INDUKCYJNA", "PRZEJSCIOWKA DO TELEFONU",
+    "ETUI", "NR TELEFONU", "MODEL", "NR SDJ", "UWAGI", "ID"
+]
+
+SQL_GET_TELEFONY = f"""
+    SELECT b.[NR KADROWY], b.[NAZWISKO],
+           a.[STATUS], a.[IMEI], a.[LADOWARKA], a.[KABEL USB C],
+           a.[LADOWARKA INDUKCYJNA], a.[PRZEJSCIOWKA DO TELEFONU],
+           a.[ETUI], a.[NR TELEFONU], a.[MODEL], a.[NR SDJ], a.[UWAGI], a.[ID]
+    FROM {S}.[mSPRZET_TELEFONY] a
+    LEFT JOIN {U} b ON a.[ID_UZYTKOWNIKA] = b.[ID_UZYTKOWNIKA]
+"""
+
+SQL_GET_TELEFONY_UZYTKOWNIKA = f"""
+    SELECT [STATUS], [IMEI], [LADOWARKA], [KABEL USB C], [LADOWARKA INDUKCYJNA],
+           [PRZEJSCIOWKA DO TELEFONU], [ETUI], [NR TELEFONU], [MODEL],
+           [NR SDJ], [UWAGI], [ID_UZYTKOWNIKA], [ID]
+    FROM {S}.[mSPRZET_TELEFONY]
+    WHERE [ID_UZYTKOWNIKA] = ?
+"""
+
+
+def get_all_telefony() -> list:
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(SQL_GET_TELEFONY)
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_telefony_uzytkownika(user_id) -> list:
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(SQL_GET_TELEFONY_UZYTKOWNIKA, (user_id,))
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_modele_telefonow() -> list:
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"SELECT [MODEL_TELEFONU] FROM {S}.[mSPRZET_MODEL_TELEFONU] WHERE CZY_AKTYWNY = 1"
+        )
+        return [row[0] for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_operatorzy() -> list:
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"SELECT [OPERATOR_KOMORKOWY] FROM {S}.[mSPRZET_OPERATORZY_KOMORKOWI] WHERE CZY_AKTYWNY = 1"
+        )
+        return [row[0] for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  SLUCHAWKI
+# ═══════════════════════════════════════════════════════════════
+
+SLUCHAWKI_COLUMNS = [
+    "NR KADROWY", "IMIE", "NAZWISKO", "STATUS",
+    "NR SERYJNY", "MODEL", "NR SDJ", "UWAGI", "ID"
+]
+
+SQL_GET_SLUCHAWKI = f"""
+    SELECT b.[NR KADROWY], b.[IMIE], b.[NAZWISKO],
+           a.[STATUS], a.[NR SERYJNY], a.[MODEL], a.[NR SDJ], a.[UWAGI], a.[ID]
+    FROM {S}.[mSPRZET_SLUCHAWKI] a
+    LEFT JOIN {U} b ON a.[ID_UZYTKOWNIKA] = b.[ID_UZYTKOWNIKA]
+"""
+
+SQL_GET_SLUCHAWKI_UZYTKOWNIKA = f"""
+    SELECT [STATUS], [NR SERYJNY], [MODEL], [NR SDJ], [UWAGI], [ID_UZYTKOWNIKA], [ID]
+    FROM {S}.[mSPRZET_SLUCHAWKI]
+    WHERE [ID_UZYTKOWNIKA] = ?
+"""
+
+
+def get_all_sluchawki() -> list:
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(SQL_GET_SLUCHAWKI)
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_sluchawki_uzytkownika(user_id) -> list:
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(SQL_GET_SLUCHAWKI_UZYTKOWNIKA, (user_id,))
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  KARTY SIM
+# ═══════════════════════════════════════════════════════════════
+
+KARTY_SIM_COLUMNS = [
+    "NR KADROWY", "IMIE", "NAZWISKO", "STATUS",
+    "NR TELEFONU", "NR SIM", "OPERATOR", "NR SDJ", "UWAGI", "ID"
+]
+
+SQL_GET_KARTY_SIM = f"""
+    SELECT b.[NR KADROWY], b.[IMIE], b.[NAZWISKO],
+           a.[STATUS], a.[NR TELEFONU], a.[NR SIM], a.[OPERATOR],
+           a.[NR SDJ], a.[UWAGI], a.[ID]
+    FROM {S}.[mSPRZET_KARTY_SIM] a
+    LEFT JOIN {U} b ON a.[ID_UZYTKOWNIKA] = b.[ID_UZYTKOWNIKA]
+"""
+
+SQL_GET_KARTY_SIM_UZYTKOWNIKA = f"""
+    SELECT [STATUS], [NR TELEFONU], [NR SIM], [OPERATOR],
+           [NR SDJ], [UWAGI], [ID_UZYTKOWNIKA], [ID]
+    FROM {S}.[mSPRZET_KARTY_SIM]
+    WHERE [ID_UZYTKOWNIKA] = ?
+"""
+
+
+def get_all_karty_sim() -> list:
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(SQL_GET_KARTY_SIM)
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_karty_sim_uzytkownika(user_id) -> list:
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(SQL_GET_KARTY_SIM_UZYTKOWNIKA, (user_id,))
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  ROUTER
+# ═══════════════════════════════════════════════════════════════
+
+ROUTER_COLUMNS = [
+    "NR KADROWY", "IMIE", "NAZWISKO", "STATUS",
+    "IMEI", "NR TELEFONU", "NR SIM", "OPERATOR", "NR SDJ", "UWAGI", "ID"
+]
+
+SQL_GET_ROUTER = f"""
+    SELECT b.[NR KADROWY], b.[IMIE], b.[NAZWISKO],
+           a.[STATUS], a.[IMEI], a.[NR TELEFONU], a.[NR SIM],
+           a.[OPERATOR], a.[NR SDJ], a.[UWAGI], a.[ID]
+    FROM {S}.[mSPRZET_ROUTER] a
+    LEFT JOIN {U} b ON a.[ID_UZYTKOWNIKA] = b.[ID_UZYTKOWNIKA]
+"""
+
+SQL_GET_ROUTER_UZYTKOWNIKA = f"""
+    SELECT [STATUS], [IMEI], [NR TELEFONU], [NR SIM], [OPERATOR],
+           [NR SDJ], [UWAGI], [ID_UZYTKOWNIKA], [ID]
+    FROM {S}.[mSPRZET_ROUTER]
+    WHERE [ID_UZYTKOWNIKA] = ?
+"""
+
+
+def get_all_router() -> list:
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(SQL_GET_ROUTER)
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_router_uzytkownika(user_id) -> list:
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(SQL_GET_ROUTER_UZYTKOWNIKA, (user_id,))
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  MYSZKI
+# ═══════════════════════════════════════════════════════════════
+
+MYSZKI_COLUMNS = [
+    "NR KADROWY", "IMIE", "NAZWISKO", "STATUS", "NR SDJ", "UWAGI", "ID"
+]
+
+SQL_GET_MYSZKI = f"""
+    SELECT b.[NR KADROWY], b.[IMIE], b.[NAZWISKO],
+           a.[STATUS], a.[NR SDJ], a.[UWAGI], a.[ID]
+    FROM {S}.[mSPRZET_MYSZKI] a
+    LEFT JOIN {U} b ON a.[ID_UZYTKOWNIKA] = b.[ID_UZYTKOWNIKA]
+"""
+
+SQL_GET_MYSZKI_UZYTKOWNIKA = f"""
+    SELECT [STATUS], [NR SDJ], [UWAGI], [ID_UZYTKOWNIKA], [ID]
+    FROM {S}.[mSPRZET_MYSZKI]
+    WHERE [ID_UZYTKOWNIKA] = ?
+"""
+
+
+def get_all_myszki() -> list:
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(SQL_GET_MYSZKI)
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_myszki_uzytkownika(user_id) -> list:
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(SQL_GET_MYSZKI_UZYTKOWNIKA, (user_id,))
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  KLAWIATURY
+# ═══════════════════════════════════════════════════════════════
+
+KLAWIATURY_COLUMNS = [
+    "NR KADROWY", "IMIE", "NAZWISKO", "STATUS", "NR SDJ", "UWAGI", "ID"
+]
+
+SQL_GET_KLAWIATURY = f"""
+    SELECT b.[NR KADROWY], b.[IMIE], b.[NAZWISKO],
+           a.[STATUS], a.[NR SDJ], a.[UWAGI], a.[ID]
+    FROM {S}.[mSPRZET_KLAWIATURY] a
+    LEFT JOIN {U} b ON a.[ID_UZYTKOWNIKA] = b.[ID_UZYTKOWNIKA]
+"""
+
+SQL_GET_KLAWIATURY_UZYTKOWNIKA = f"""
+    SELECT [STATUS], [NR SDJ], [UWAGI], [ID_UZYTKOWNIKA], [ID]
+    FROM {S}.[mSPRZET_KLAWIATURY]
+    WHERE [ID_UZYTKOWNIKA] = ?
+"""
+
+
+def get_all_klawiatury() -> list:
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(SQL_GET_KLAWIATURY)
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_klawiatury_uzytkownika(user_id) -> list:
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(SQL_GET_KLAWIATURY_UZYTKOWNIKA, (user_id,))
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  UZYTKOWNICY / KONTA
+# ═══════════════════════════════════════════════════════════════
+
+KONTA_COLUMNS = [
+    "NR KADROWY", "IMIE", "NAZWISKO",
+    "RODZAJ ZATRUDNIENIA", "LOKALIZACJA", "ID_UZYTKOWNIKA"
+]
+
+SQL_GET_KONTA = f"""
+    SELECT [NR KADROWY], [IMIE], [NAZWISKO],
+           [RODZAJ ZATRUDNIENIA], [LOKALIZACJA], [ID_UZYTKOWNIKA]
+    FROM {U}
+"""
+
+SQL_SEARCH_USERS = f"""
+    SELECT [NR KADROWY], [IMIE], [NAZWISKO],
+           [RODZAJ ZATRUDNIENIA], [LOKALIZACJA], [ID_UZYTKOWNIKA]
+    FROM {U}
+    WHERE [NR KADROWY] LIKE ?
+       OR [IMIE] LIKE ?
+       OR [NAZWISKO] LIKE ?
+       OR CAST([ID_UZYTKOWNIKA] AS VARCHAR) LIKE ?
+"""
+
+
+def get_all_konta() -> list:
+    """Zwraca wszystkie konta uzytkownikow."""
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(SQL_GET_KONTA)
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def search_users(phrase: str) -> list:
+    """Wyszukuje uzytkownikow po frazie (nr kadrowy, imie, nazwisko, id)."""
+    pattern = f"%{phrase}%"
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(SQL_SEARCH_USERS, (pattern, pattern, pattern, pattern))
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def search_users_advanced(search_values: dict) -> list:
+    """
+    Wyszukuje użytkowników na podstawie słownika kolumna -> wartosc.
+    Ignoruje puste wartosci.
+    """
+    query_conditions = " AND ".join([f"[{key.strip('[]')}] LIKE ?" for key, val in search_values.items() if val])
+    query_values = [f"%{val}%" for val in search_values.values() if val]
+
+    query = f"""SELECT [NR KADROWY], IMIE, NAZWISKO, [RODZAJ ZATRUDNIENIA], LOKALIZACJA, ID_UZYTKOWNIKA 
+               FROM {U}"""
+    if query_conditions:
+        query += " WHERE " + query_conditions
+
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query, query_values)
+        return [list(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_user_by_id(user_id) -> dict | None:
+    """Zwraca dane uzytkownika po ID lub None jesli nie znaleziono."""
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"SELECT [NR KADROWY], [IMIE], [NAZWISKO], "
+            f"[RODZAJ ZATRUDNIENIA], [LOKALIZACJA], [ID_UZYTKOWNIKA] "
+            f"FROM {U} WHERE [ID_UZYTKOWNIKA] = ?",
+            (user_id,)
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return None
+        cols = ["NR KADROWY", "IMIE", "NAZWISKO",
+                "RODZAJ ZATRUDNIENIA", "LOKALIZACJA", "ID_UZYTKOWNIKA"]
+        return dict(zip(cols, row))
+    finally:
+        conn.close()
+
+
+def get_statusy_zatrudnienia() -> list:
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"SELECT [STATUS_ZATRUDNIENIE] FROM {DB_SCHEMA}.[mSPRZET_STATUSY_RODZAJ_ZATRUDNIENIA] "
+            f"WHERE CZY_AKTYWNY = 1"
+        )
+        return [row[0] for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_statusy_lokalizacji() -> list:
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"SELECT [STATUS_LOKALIZACJA] FROM {DB_SCHEMA}.[mSPRZET_STATUSY_LOKALIZACJA] "
+            f"WHERE CZY_AKTYWNY = 1"
+        )
+        return [row[0] for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+
+def get_user_by_nr_kadrowy(nr_kadrowy: str) -> dict | None:
+    """Zwraca dane uzytkownika po numerze kadrowym (dokładne dopasowanie) lub None."""
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"SELECT [NR KADROWY], [IMIE], [NAZWISKO], "
+            f"[RODZAJ ZATRUDNIENIA], [LOKALIZACJA], [ID_UZYTKOWNIKA] "
+            f"FROM {U} WHERE [NR KADROWY] = ?",
+            (nr_kadrowy,)
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return None
+        cols = ["NR KADROWY", "IMIE", "NAZWISKO", "RODZAJ ZATRUDNIENIA", "LOKALIZACJA", "ID_UZYTKOWNIKA"]
+        return dict(zip(cols, row))
+    finally:
+        conn.close()
