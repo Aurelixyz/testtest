@@ -1,0 +1,62 @@
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QTableWidget,
+                             QTableWidgetItem, QPushButton, QHeaderView)
+from PyQt6.QtCore import Qt
+from gui_shared import DISPLAY_NAMES, InteractiveTableWidget
+
+class HistoryDialog(QDialog):
+    def __init__(self, parent, title: str, history_data: list, db_columns: list):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setFixedSize(1100, 500)
+        self.setModal(True)
+
+        layout = QVBoxLayout(self)
+
+        # Usunięto QLabel z tytułem
+
+        headers = []
+        for col in db_columns:
+            if col == "ID_Historia":
+                headers.append("ID LOGU")
+            elif col == "TypZmiany":
+                headers.append("OPERACJA")
+            elif col == "DataZmiany":
+                headers.append("DATA ZMIANY")
+            elif col == "Uzytkownik":
+                headers.append("AUTOR ZMIANY")
+            else:
+                headers.append(DISPLAY_NAMES.get(col, col).replace("\n", " "))
+
+        self.table = InteractiveTableWidget()
+        self.table.setColumnCount(len(headers))
+        self.table.setHorizontalHeaderLabels(headers)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setAlternatingRowColors(True)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+
+        for i, col in enumerate(db_columns):
+            if col in ("ID_Historia", "TypZmiany", "DataZmiany", "ID"):
+                self.table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
+
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
+        self.table.setSortingEnabled(False)
+        self.table.setRowCount(len(history_data))
+        for row_idx, row_data in enumerate(history_data):
+            for col_idx, val in enumerate(row_data):
+                cell_text = str(val) if val is not None else ""
+                item = QTableWidgetItem(cell_text)
+                item.setToolTip(cell_text)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.table.setItem(row_idx, col_idx, item)
+        self.table.setSortingEnabled(True)
+
+        layout.addWidget(self.table)
+
+        btn_close = QPushButton("Zamknij podgląd")
+        btn_close.setMinimumHeight(35)
+        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_close.clicked.connect(self.accept)
+        layout.addWidget(btn_close)

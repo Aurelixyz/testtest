@@ -3,21 +3,22 @@ import os
 import pandas as pd
 from PyQt6.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton,
                              QLabel, QStackedWidget, QScrollArea, QMessageBox, QFrame,
-                             QApplication, QMenu, QFileDialog, QDialog)
+                             QApplication, QMenu, QFileDialog, QDialog, QTableWidget, QHeaderView)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
 
 from record_dialog import RecordDialog
 from assignment_dialog import AssignmentDialog
+from history_dialog import HistoryDialog
 import sprzet_queries as db
 from dokument_service import generuj_protokol_odbioru as _svc_protokol, generuj_oswiadczenie_laptop as _svc_oswiadczenie
 from email_service import get_user_equipment as _svc_get_equipment, build_email_body as _svc_build_email, \
     send_email as _svc_send_email
 
-from config import APP_ICON  # Pobieranie nazwy ikony z konfiguracji
+from config import APP_ICON
 
 from gui_shared import (DISPLAY_NAMES, GLOBAL_STYLE, BackgroundWidget,
-                        OswiadczenieDateDialog, SearchUserDialog)
+                        OswiadczenieDateDialog, SearchUserDialog, FlowLayout, InteractiveTableWidget)
 from gui_views import SectionWidget, UserEquipmentWidget
 
 
@@ -27,20 +28,15 @@ class Application(QMainWindow):
         self.setWindowTitle("mSprzęt")
         self.setMinimumSize(1200, 600)
 
-        # --- ZABEZPIECZENIE ŚCIEŻKI IKONY DLA PYINSTALLERA ---
         def resource_path(relative_path):
-            """ Zwraca absolutną ścieżkę do pliku, działa w dev i w skompilowanym .exe """
             try:
-                # PyInstaller tworzy folder w %TEMP% i przechowuje ścieżkę w _MEIPASS
                 base_path = sys._MEIPASS
             except Exception:
                 base_path = os.path.abspath(".")
             return os.path.join(base_path, relative_path)
 
-        # Ustawienie ikony okna i paska zadań
         icon_path = resource_path(APP_ICON)
         self.setWindowIcon(QIcon(icon_path))
-        # -----------------------------------------------------
 
         self.user_values = {}
         self.sections_widgets = {}
@@ -105,18 +101,29 @@ class Application(QMainWindow):
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)
 
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(5)
+
         left_widget = BackgroundWidget(self)
         left_layout = QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(5)
+
         main_layout.addWidget(left_widget, stretch=4)
 
         self.top_frame = BackgroundWidget(self)
-        top_layout = QHBoxLayout(self.top_frame)
+
+        top_layout = FlowLayout(self.top_frame, spacing=5)
+        top_layout.setContentsMargins(0, 0, 0, 20)
+
         buttons_top = ["KONTA UŻYTKOWNIKÓW", "LAPTOPY", "MONITORY", "TELEFONY", "SŁUCHAWKI", "KARTY SIM", "ROUTER",
                        "MYSZKI", "KLAWIATURY"]
 
         for btn_text in buttons_top:
             btn = QPushButton(btn_text)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setMinimumWidth(130)
+            btn.setMinimumHeight(35)
             self.tab_buttons[btn_text] = btn
             btn.clicked.connect(lambda checked, text=btn_text: self.show_frame(text))
             top_layout.addWidget(btn)
@@ -126,6 +133,8 @@ class Application(QMainWindow):
         sp = self.btn_uzytkownik_tab.sizePolicy()
         sp.setRetainSizeWhenHidden(True)
         self.btn_uzytkownik_tab.setSizePolicy(sp)
+        self.btn_uzytkownik_tab.setMinimumWidth(180)
+        self.btn_uzytkownik_tab.setMinimumHeight(35)
         self.btn_uzytkownik_tab.clicked.connect(lambda: self.show_frame("UŻYTKOWNIK"))
         self.btn_uzytkownik_tab.hide()
         top_layout.addWidget(self.btn_uzytkownik_tab)
@@ -134,8 +143,10 @@ class Application(QMainWindow):
 
         self.user_info_frame = BackgroundWidget(self)
         user_info_layout = QHBoxLayout(self.user_info_frame)
+        user_info_layout.setContentsMargins(0, 0, 0, 0)
         for db_col in ["NR KADROWY", "IMIE", "NAZWISKO", "RODZAJ ZATRUDNIENIA", "LOKALIZACJA", "ID_UZYTKOWNIKA"]:
             box = QVBoxLayout()
+            box.setContentsMargins(0, 0, 0, 0)
             label_title = QLabel(DISPLAY_NAMES.get(db_col, db_col))
             label_title.setStyleSheet("background: transparent; border: none; font-weight: bold;")
             box.addWidget(label_title)
@@ -168,6 +179,7 @@ class Application(QMainWindow):
         self.right_content = BackgroundWidget(self)
         self.right_layout = QVBoxLayout(self.right_content)
         self.right_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.right_layout.setContentsMargins(5, 0, 0, 0)
         self.right_frame.setWidget(self.right_content)
         main_layout.addWidget(self.right_frame, stretch=1)
 
@@ -251,6 +263,13 @@ class Application(QMainWindow):
             line.setStyleSheet("background-color: #c0c0c0; margin: 10px 0;")
             self.right_layout.addWidget(line)
 
+            btn_history = QPushButton("HISTORIA ZMIAN")
+            btn_history.setMinimumHeight(30)
+            btn_history.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_history.setStyleSheet("background-color: #d1ecf1; color: #0c5460; font-weight: bold;")
+            btn_history.clicked.connect(self.handle_show_history)
+            self.right_layout.addWidget(btn_history)
+
             for btn_text, callback in context_actions:
                 btn = QPushButton(btn_text)
                 btn.setMinimumHeight(30)
@@ -298,6 +317,41 @@ class Application(QMainWindow):
 
         self.right_layout.addStretch()
 
+    def handle_show_history(self):
+        section = self.current_section
+        record_id = None
+        table_name = None
+
+        if section == "UŻYTKOWNIK":
+            for sec_key, table in self.user_equipment_view.asset_tables.items():
+                selected = table.selectionModel().selectedRows()
+                if selected:
+                    row = selected[0].row()
+                    record_id = int(table.item(row, table.columnCount() - 1).text())
+                    table_name = self.section_config[sec_key][0]
+                    break
+        elif section in self.sections_widgets:
+            data = self.sections_widgets[section].get_selected_record_data()
+            if data:
+                id_key = "ID_UZYTKOWNIKA" if section == "KONTA UŻYTKOWNIKÓW" else "ID"
+                record_id = int(data.get(id_key))
+                table_name = self.section_config[section][0]
+
+        if record_id and table_name:
+            try:
+                history_rows, db_cols = db.get_record_history(table_name, record_id)
+                if not history_rows:
+                    QMessageBox.information(self, "Brak danych",
+                                            "Dla tego elementu nie zarejestrowano jeszcze żadnych zmian.")
+                    return
+
+                dlg = HistoryDialog(self, f"Rejestr zmian: {section} (ID: {record_id})", history_rows, db_cols)
+                dlg.exec()
+            except Exception as e:
+                QMessageBox.critical(self, "Błąd", f"Nie udało się otworzyć historii:\n{e}")
+        else:
+            QMessageBox.warning(self, "Brak wyboru", "Zaznacz wiersz, aby wyświetlić historię zmian.")
+
     def ask_yes_no(self, title, message):
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle(title)
@@ -319,9 +373,11 @@ class Application(QMainWindow):
                 ("USUŃ KONTO", lambda: self.handle_delete(section))
             ]
         elif section == "UŻYTKOWNIK":
+            # --- ZMIANA: Rozbicie na dwa niezależne przyciski w menu bocznym ---
             return [
                 ("EDYTUJ ZAZNACZONY SPRZĘT", lambda: self.handle_edit("UŻYTKOWNIK")),
-                ("ODEPNIJ / USUŃ SPRZĘT", self.handle_delete_from_user),
+                ("ODEPNIJ SPRZĘT", self.handle_unassign_from_user),
+                ("USUŃ SPRZĘT", self.handle_delete_from_user),
                 ("PRZYPISZ LAPTOP", lambda: self.handle_assign("LAPTOPY")),
                 ("PRZYPISZ MONITOR", lambda: self.handle_assign("MONITORY")),
                 ("PRZYPISZ TELEFON", lambda: self.handle_assign("TELEFONY")),
@@ -492,6 +548,30 @@ class Application(QMainWindow):
             db.delete_record_by_id(self.section_config[section][0], int(data[id_key]))
             sec_widget.load_data()
 
+    # --- NOWOŚĆ: Funkcja obsługująca czyszczenie przypisania bez usuwania rekordu ---
+    def handle_unassign_from_user(self):
+        for sec_key, table in self.user_equipment_view.asset_tables.items():
+            selected = table.selectionModel().selectedRows()
+            if selected:
+                row = selected[0].row()
+                # Pobieramy ID sprzętu, które znajduje się w ostatniej ukrytej kolumnie
+                record_id = int(table.item(row, table.columnCount() - 1).text())
+
+                if self.ask_yes_no('Potwierdzenie odpięcia',
+                                   f'Czy na pewno chcesz ODPIĄĆ (wyczyścić przypisanie) ten sprzęt od użytkownika?\n(Sprzęt wróci do puli wolnych urządzeń)'):
+                    try:
+                        # Aktualizujemy TYLKO fizycznie istniejącą kolumnę ID_UZYTKOWNIKA
+                        db.update_record(self.section_config[sec_key][0], record_id, {
+                            "ID_UZYTKOWNIKA": None
+                        })
+                        # Odświeżamy widok sprzętów użytkownika
+                        self.user_equipment_view.load_user_assets(self.user_values["ID_UZYTKOWNIKA"].text())
+                    except Exception as e:
+                        QMessageBox.critical(self, "Błąd bazy danych", f"Nie udało się odpiąć sprzętu:\n{e}")
+                return
+        QMessageBox.warning(self, "Brak wyboru", "Zaznacz sprzęt do odpięcia.")
+
+    # --- POPRAWKA: Funkcja usuwania sprzętu w oknie użytkownika sprząta wyłącznie bazę ---
     def handle_delete_from_user(self):
         for sec_key, table in self.user_equipment_view.asset_tables.items():
             selected = table.selectionModel().selectedRows()
@@ -500,7 +580,7 @@ class Application(QMainWindow):
                 record_id = int(table.item(row, table.columnCount() - 1).text())
 
                 if self.ask_yes_no('Potwierdzenie usunięcia',
-                                   f'Czy na pewno chcesz bezpowrotnie USUNĄĆ ten sprzęt z bazy danych?\n(Aby tylko odpiąć, użyj przycisku Edytuj)'):
+                                   f'Czy na pewno chcesz bezpowrotnie USUNĄĆ ten sprzęt z bazy danych?\n(Urządzenie zostanie całkowicie skasowane)'):
                     db.delete_record_by_id(self.section_config[sec_key][0], record_id)
                     self.user_equipment_view.load_user_assets(self.user_values["ID_UZYTKOWNIKA"].text())
                 return
@@ -515,7 +595,8 @@ class Application(QMainWindow):
         user_data = {k: v.text() for k, v in self.user_values.items()}
         table_name, fetch_m, cols = self.section_config[section]
 
-        dlg = AssignmentDialog(self, f"Przypisz {section}", user_data, table_name, fetch_m, cols,
+        # --- ZMIANA: Przekazujemy 'section' (tekstowo) jako drugi parametr dla okna dialogowego ---
+        dlg = AssignmentDialog(self, section, user_data, table_name, fetch_m, cols,
                                lambda: self.user_equipment_view.load_user_assets(user_id))
         dlg.exec()
 
@@ -714,12 +795,8 @@ class Application(QMainWindow):
                 QApplication.restoreOverrideCursor()
 
     def closeEvent(self, event):
-        """Metoda wywoływana, gdy użytkownik próbuje zamknąć okno aplikacji."""
         for sec_widget in self.sections_widgets.values():
             if hasattr(sec_widget, 'worker') and sec_widget.worker and sec_widget.worker.isRunning():
-                # Sygnalizujemy wątkowi, żeby przestał wysyłać sygnały
                 sec_widget.worker.is_cancelled = True
-                # Dajemy mu ułamek sekundy na kulturalne zamknięcie się
                 sec_widget.worker.wait(500)
-
-        event.accept()  # Zezwalamy na zamknięcie okna
+        event.accept()

@@ -633,3 +633,69 @@ def get_user_by_nr_kadrowy(nr_kadrowy: str) -> dict | None:
         return dict(zip(cols, row))
     finally:
         conn.close()
+
+
+def get_record_history(table_name: str, record_id: int) -> tuple[list, list]:
+    """
+    Pobiera pełną historię zmian oraz fizyczne nazwy kolumn z bazy
+    dla konkretnego rekordu (na podstawie jego ID).
+    """
+    id_col = "[ID_UZYTKOWNIKA]" if table_name == "mSPRZET_KONTA_UZYTKOWNIKOW" else "[ID]"
+    query = f"""
+        SELECT * FROM {S}.[{table_name}_Historia] 
+        WHERE {id_col} = ? 
+        ORDER BY [DataZmiany] DESC
+    """
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query, (record_id,))
+        rows = [list(row) for row in cursor.fetchall()]
+        # Dynamicznie pobieramy nazwy kolumn prosto z bazy danych
+        columns = [desc[0] for desc in cursor.description]
+        return rows, columns
+    finally:
+        conn.close()
+
+def get_global_history():
+    """Pobiera skonsolidowaną historię ze wszystkich 9 tabel audytowych."""
+    query = """
+        SELECT 'KONTA UŻYTKOWNIKÓW' AS KATEGORIA, [ID_UZYTKOWNIKA] AS ID_REKORDU, [TypZmiany] AS OPERACJA, CONVERT(varchar, [DataZmiany], 120) AS [DATA ZMIANY], [Uzytkownik] AS [AUTOR ZMIANY] 
+        FROM [LODZCD\JN12504].[mSPRZET_KONTA_UZYTKOWNIKOW_Historia]
+        UNION ALL
+        SELECT 'LAPTOPY', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
+        FROM [LODZCD\JN12504].[mSPRZET_LAPTOPY_Historia]
+        UNION ALL
+        SELECT 'MONITORY', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
+        FROM [LODZCD\JN12504].[mSPRZET_MONITORY_Historia]
+        UNION ALL
+        SELECT 'TELEFONY', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
+        FROM [LODZCD\JN12504].[mSPRZET_TELEFONY_Historia]
+        UNION ALL
+        SELECT 'SŁUCHAWKI', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
+        FROM [LODZCD\JN12504].[mSPRZET_SLUCHAWKI_Historia]
+        UNION ALL
+        SELECT 'KARTY SIM', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
+        FROM [LODZCD\JN12504].[mSPRZET_KARTY_SIM_Historia]
+        UNION ALL
+        SELECT 'ROUTER', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
+        FROM [LODZCD\JN12504].[mSPRZET_ROUTER_Historia]
+        UNION ALL
+        SELECT 'MYSZKI', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
+        FROM [LODZCD\JN12504].[mSPRZET_MYSZKI_Historia]
+        UNION ALL
+        SELECT 'KLAWIATURY', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
+        FROM [LODZCD\JN12504].[mSPRZET_KLAWIATURY_Historia]
+        ORDER BY [DATA ZMIANY] DESC
+    """
+    conn = create_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query)
+        return [list(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"Błąd globalnej historii: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()

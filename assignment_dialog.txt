@@ -10,9 +10,10 @@ from sprzet_queries import update_record
 class InteractiveTableWidget(QTableWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        font = QFont("Arial", 10, QFont.Weight.Bold)
+        font = QFont("Arial", 8, QFont.Weight.Bold)
         self.horizontalHeader().setFont(font)
-        self.horizontalHeader().setMinimumHeight(45)
+        self.horizontalHeader().setMinimumHeight(32)
+        self.verticalHeader().setDefaultSectionSize(25)
 
     def mousePressEvent(self, event):
         item = self.itemAt(event.pos())
@@ -22,15 +23,15 @@ class InteractiveTableWidget(QTableWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        # BLOKADA 1: Zapobiega zaznaczaniu wierszy poprzez przeciąganie kursorem
         pass
 
 
 class AssignmentDialog(QDialog):
-    def __init__(self, parent, title: str, user_data: dict, table_name: str, fetch_method, columns: list,
+    def __init__(self, parent, section: str, user_data: dict, table_name: str, fetch_method, columns: list,
                  on_assign_callback):
         super().__init__(parent)
-        self.setWindowTitle(title)
+        self.section = section
+        self.setWindowTitle(f"Przypisz {section}")
         self.setFixedSize(1100, 600)
         self.setModal(True)
 
@@ -62,7 +63,7 @@ class AssignmentDialog(QDialog):
         self.filter_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.filter_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.filter_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self.filter_scroll.setFixedHeight(60)
+        self.filter_scroll.setFixedHeight(26)
 
         self.filter_container = QWidget()
         self.filter_layout = QHBoxLayout(self.filter_container)
@@ -72,14 +73,9 @@ class AssignmentDialog(QDialog):
             box = QWidget()
             box_layout = QVBoxLayout(box)
             box_layout.setContentsMargins(2, 0, 2, 0)
-            box_layout.setSpacing(2)
+            box_layout.setSpacing(0)
 
             if col not in ("ID", "ID_UZYTKOWNIKA"):
-                lbl = QLabel(self.display_names.get(col, col))
-                lbl.setStyleSheet(
-                    "font-size: 8pt; color: gray; font-weight: bold; background: transparent; border: none;")
-                box_layout.addWidget(lbl)
-
                 entry = QLineEdit()
                 entry.textChanged.connect(self._apply_filters)
                 self.filter_entries[col] = entry
@@ -144,12 +140,16 @@ class AssignmentDialog(QDialog):
     def _load_data(self):
         try:
             self.all_data = self.fetch_method()
+            self.table.setSortingEnabled(False)
             self.table.setRowCount(len(self.all_data))
             for row_idx, row_data in enumerate(self.all_data):
                 for col_idx, val in enumerate(row_data):
-                    item = QTableWidgetItem(str(val) if val is not None else "")
+                    text_val = str(val) if val is not None else ""
+                    item = QTableWidgetItem(text_val)
+                    item.setToolTip(text_val)
                     self.table.setItem(row_idx, col_idx, item)
             self._apply_filters()
+            self.table.setSortingEnabled(True)
             QTimer.singleShot(10, self._sync_filter_widths)
         except Exception as e:
             QMessageBox.critical(self, "Błąd", f"Nie udało się pobrać danych: {e}")
@@ -190,6 +190,31 @@ class AssignmentDialog(QDialog):
             QMessageBox.critical(self, "Błąd", f"Nie udało się przypisać sprzętu: {e}")
 
     def _add_new(self):
-        QMessageBox.information(self, "Info",
-                                "Zostaniesz przeniesiony do standardowego okna DODAJ. Po dodaniu przypisz ręcznie.")
-        self.reject()
+        # --- ZMIANA: Przekazujemy wszystkie dane pracownika (Nr kadrowy, Imię i Nazwisko) do formularza ---
+        initial_data = {
+            "NR KADROWY": self.user_data.get("NR KADROWY", ""),
+            "IMIE": self.user_data.get("IMIE", ""),
+            "NAZWISKO": self.user_data.get("NAZWISKO", "")
+        }
+
+        if hasattr(self.parent(), '_get_fields_config'):
+            fields_config = self.parent()._get_fields_config(self.section)
+
+            def on_record_saved():
+                self._load_data()
+                self.on_assign_callback()
+
+            from record_dialog import RecordDialog
+            dlg = RecordDialog(
+                self,
+                f"Dodaj i Przypisz - {self.section}",
+                fields_config,
+                self.table_name,
+                [],
+                on_record_saved,
+                None,
+                initial_data
+            )
+            dlg.exec()
+        else:
+            QMessageBox.critical(self, "Błąd", "Nie udało się wygenerować kreatora dodawania.")
