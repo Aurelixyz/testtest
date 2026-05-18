@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 
-from gui import DISPLAY_NAMES, InteractiveTableWidget
+from gui_shared import DISPLAY_NAMES, InteractiveTableWidget
 
 
 class ImportInfoDialog(QDialog):
@@ -29,7 +29,7 @@ class ImportInfoDialog(QDialog):
             f"Aby zaimportować dane do sekcji <b>{self.section}</b>, przygotuj plik Excel<br>"
             f"zawierający w pierwszym wierszu (jako nagłówki) poniższe nazwy kolumn:"
         )
-        lbl.setStyleSheet("font-size: 13px; background: transparent;")
+        lbl.setStyleSheet("font-size: 10pt; background: transparent;")
         layout.addWidget(lbl)
 
         self.table = InteractiveTableWidget()
@@ -130,7 +130,7 @@ class GenericExcelImportPreviewDialog(QDialog):
         layout = QVBoxLayout(self)
 
         lbl = QLabel(f"Weryfikacja danych z pliku Excel: {self.section}")
-        lbl.setStyleSheet("font-weight: bold; font-size: 14px; background: transparent;")
+        lbl.setStyleSheet("font-weight: bold; font-size: 11pt; background: transparent;")
         layout.addWidget(lbl)
 
         self.table = InteractiveTableWidget()

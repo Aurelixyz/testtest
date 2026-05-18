@@ -1,744 +1,47 @@
 import sys
+import os
 import pandas as pd
-from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-                             QLabel, QStackedWidget, QTableWidget, QTableWidgetItem, QHeaderView,
-                             QLineEdit, QScrollArea, QMessageBox, QFrame, QInputDialog, QApplication,
-                             QMenu, QFileDialog, QCalendarWidget, QDialogButtonBox, QFormLayout, QDialog,
-                             QGroupBox, QSizePolicy, QComboBox)
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QClipboard, QColor, QFontMetrics, QFont
+from PyQt6.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton,
+                             QLabel, QStackedWidget, QScrollArea, QMessageBox, QFrame,
+                             QApplication, QMenu, QFileDialog, QDialog)
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIcon
 
 from record_dialog import RecordDialog
 from assignment_dialog import AssignmentDialog
-from PyQt6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel
-from PyQt6.QtWidgets import QTableView
 import sprzet_queries as db
 from dokument_service import generuj_protokol_odbioru as _svc_protokol, generuj_oswiadczenie_laptop as _svc_oswiadczenie
 from email_service import get_user_equipment as _svc_get_equipment, build_email_body as _svc_build_email, \
     send_email as _svc_send_email
 
-# =========================================================================
-# SŁOWNIK POLSKICH NAZW (Wielolinijkowe wpisy)
-# =========================================================================
-DISPLAY_NAMES = {
-    "NR KADROWY": "NUMER\nKADROWY",
-    "IMIE": "IMIĘ",
-    "NAZWISKO": "NAZWISKO",
-    "RODZAJ ZATRUDNIENIA": "RODZAJ\nZATRUDNIENIA",
-    "LOKALIZACJA": "LOKALIZACJA",
-    "ID_UZYTKOWNIKA": "ID",
-    "STATUS": "STATUS",
-    "NR SRODKA TRWALEGO": "NR ŚRODKA\nTRWAŁEGO",
-    "NAZWA LAPTOPA": "NAZWA\nLAPTOPA",
-    "NR SERYJNY": "NUMER\nSERYJNY",
-    "MODEL": "MODEL",
-    "NR SDJ": "NUMER SDJ",
-    "UWAGI": "UWAGI",
-    "ID": "ID",
-    "IMEI": "IMEI",
-    "LADOWARKA": "ŁADOWARKA",
-    "KABEL USB C": "KABEL\nUSB C",
-    "LADOWARKA INDUKCYJNA": "ŁADOWARKA\nINDUKCYJNA",
-    "PRZEJSCIOWKA DO TELEFONU": "PRZEJŚCIÓWKA\nDO TELEFONU",
-    "ETUI": "ETUI",
-    "NR TELEFONU": "NUMER\nTELEFONU",
-    "NR SIM": "NUMER SIM",
-    "OPERATOR": "OPERATOR"
-}
+from config import APP_ICON  # Pobieranie nazwy ikony z konfiguracji
 
-GLOBAL_STYLE = """
-    QWidget {
-        background-color: #f0f0f0;
-        color: #000000;
-        font-family: Arial;
-        font-size: 13px;
-    }
-    QLineEdit, QComboBox, QCheckBox {
-        background-color: white;
-        color: black;
-        border: 1px solid #a0a0a0;
-        padding: 3px;
-    }
-    QPushButton {
-        background-color: #e1e1e1;
-        color: black;
-        border: 1px solid #adadad;
-        padding: 6px;
-        border-radius: 4px;
-    }
-    QPushButton:hover {
-        background-color: #d5d5d5;
-    }
-    QPushButton#activeTab {
-        background-color: #0078D7;
-        color: white;
-        font-weight: bold;
-        border: 2px solid #005a9e;
-        border-radius: 4px;
-    }
-    QGroupBox {
-        background-color: white;
-        border: 1px solid #b0b0b0;
-        margin-top: 15px;
-        font-weight: bold;
-    }
-    QGroupBox::title {
-        subcontrol-origin: margin;
-        subcontrol-position: top left;
-        left: 10px;
-        color: black;
-        background: transparent;
-    }
-    QTableView, QTableWidget { 
-        background-color: white; 
-        alternate-background-color: #f2f6fa; 
-        color: black; 
-        gridline-color: #d0d0d0;
-        outline: 0; 
-        border: 1px solid #c0c0c0;
-    }
-    QTableView::item:selected, QTableWidget::item:selected {
-        background-color: #0078D7;
-        color: white;
-    }
-    QTableView::item:selected:!active, QTableWidget::item:selected:!active {
-        background-color: #0078D7;
-        color: white;
-    }
-    QHeaderView::section { 
-        background-color: #d9d9d9; 
-        color: black; 
-        font-weight: bold; 
-        border: 1px solid #c0c0c0; 
-        padding: 4px; 
-    }
-    QScrollArea {
-        border: none;
-        background-color: #f0f0f0;
-    }
-"""
+from gui_shared import (DISPLAY_NAMES, GLOBAL_STYLE, BackgroundWidget,
+                        OswiadczenieDateDialog, SearchUserDialog)
+from gui_views import SectionWidget, UserEquipmentWidget
 
-
-class BackgroundWidget(QWidget):
-    def __init__(self, parent_app=None):
-        super().__init__()
-        self.parent_app = parent_app
-
-    def mousePressEvent(self, event):
-        if self.parent_app and hasattr(self.parent_app, 'clear_all_selections'):
-            self.parent_app.clear_all_selections()
-        super().mousePressEvent(event)
-
-
-class InteractiveTableWidget(QTableWidget):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        font = QFont("Arial", 10, QFont.Weight.Bold)
-        self.horizontalHeader().setFont(font)
-        self.horizontalHeader().setMinimumHeight(45)
-
-    def mousePressEvent(self, event):
-        item = self.itemAt(event.pos())
-        if not item:
-            self.clearSelection()
-            self.clearFocus()
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        pass
-
-
-class InteractiveTableView(QTableView):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        font = QFont("Arial", 10, QFont.Weight.Bold)
-        self.horizontalHeader().setFont(font)
-        self.horizontalHeader().setMinimumHeight(45)
-
-    def mousePressEvent(self, event):
-        item = self.indexAt(event.pos())
-        if not item.isValid():
-            self.clearSelection()
-            self.clearFocus()
-        super().mousePressEvent(event)
-
-
-# =========================================================================
-# KLASY POMOCNICZE / DIALOGI
-# =========================================================================
-
-class DateDialog(QDialog):
-    def __init__(self, parent=None, title="Wybierz datę"):
-        super().__init__(parent)
-        self.setWindowTitle(title)
-        self.setModal(True)
-        self.setFixedSize(350, 300)
-
-        layout = QVBoxLayout(self)
-        self.calendar = QCalendarWidget(self)
-        self.calendar.setGridVisible(True)
-
-        # --- SKUTECZNY MECHANIZM ZMIANY KURSORA ---
-        # 1. Znajdujemy wewnętrzną tabelę (widok dni)
-        calendar_view = self.calendar.findChild(QTableView)
-        if calendar_view:
-            # 2. Ustawiamy kursor bezpośrednio na viewport (obszar interaktywny)
-            # To gwarantuje, że kursor zmieni się nad siatką dni
-            calendar_view.viewport().setCursor(Qt.CursorShape.PointingHandCursor)
-
-            # Opcjonalnie: ustawiamy też na samą tabelę
-            calendar_view.setCursor(Qt.CursorShape.PointingHandCursor)
-        # ------------------------------------------
-
-        layout.addWidget(self.calendar)
-
-        button_box = QDialogButtonBox()
-        btn_ok = button_box.addButton("Wybierz", QDialogButtonBox.ButtonRole.AcceptRole)
-        btn_cancel = button_box.addButton("Anuluj", QDialogButtonBox.ButtonRole.RejectRole)
-
-        # Przyciski dolne też dostają łapkę
-        btn_ok.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
-
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        layout.addWidget(button_box)
-
-    def get_date(self) -> str:
-        return self.calendar.selectedDate().toString("yyyy-MM-dd")
-
-
-class OswiadczenieDateDialog(QDialog):
-    """Specjalne okno dla Oświadczeń - Kalendarz + przyciski 1/15 (najbliższy dzień roboczy)."""
-
-    def __init__(self, parent=None, title="Data złożenia oświadczenia"):
-        super().__init__(parent)
-        self.setWindowTitle(title)
-        self.setModal(True)
-        self.setFixedSize(380, 310)
-
-        layout = QVBoxLayout(self)
-
-        # 1. Kalendarz na górze
-        self.calendar = QCalendarWidget(self)
-        self.calendar.setGridVisible(True)
-        self.calendar.clicked.connect(self.accept)
-        layout.addWidget(self.calendar)
-
-        # 2. Przyciski z inteligentnym wyliczaniem 1. i 15. dnia
-        btn_layout = QHBoxLayout()
-        btn_1 = QPushButton("Zatrudnienie 1")
-        btn_1.setStyleSheet("background-color: #87CEFA; font-weight: bold; padding: 6px;")
-        btn_1.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_1.clicked.connect(lambda: self.set_working_day_and_accept(1))
-
-        btn_15 = QPushButton("Zatrudnienie 15")
-        btn_15.setStyleSheet("background-color: #87CEFA; font-weight: bold; padding: 6px;")
-        btn_15.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_15.clicked.connect(lambda: self.set_working_day_and_accept(15))
-
-        btn_layout.addWidget(btn_1)
-        btn_layout.addWidget(btn_15)
-        layout.addLayout(btn_layout)
-
-        # 3. Zostawiamy tylko przycisk Anuluj
-        btn_cancel = QPushButton("Anuluj")
-        btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_cancel.clicked.connect(self.reject)
-        layout.addWidget(btn_cancel)
-
-    def set_working_day_and_accept(self, target_day):
-        import datetime
-        from PyQt6.QtCore import QDate
-
-        today = datetime.date.today()
-
-        try:
-            current_target = datetime.date(today.year, today.month, target_day)
-        except ValueError:
-            current_target = None
-
-        if today.month == 12:
-            next_target = datetime.date(today.year + 1, 1, target_day)
-        else:
-            next_target = datetime.date(today.year, today.month + 1, target_day)
-
-        if current_target:
-            best_target = current_target if abs((today - current_target).days) <= abs(
-                (next_target - today).days) else next_target
-        else:
-            best_target = next_target
-
-        for i in range(7):
-            candidate = best_target + datetime.timedelta(days=i)
-            if candidate.weekday() < 5:  # 0 to poniedziałek, 4 to piątek
-                self.calendar.setSelectedDate(QDate(candidate.year, candidate.month, candidate.day))
-                break
-
-        self.accept()
-
-    def get_date(self) -> str:
-        return self.calendar.selectedDate().toString("yyyy-MM-dd")
-
-
-class SearchUserDialog(QDialog):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.setWindowTitle("Wyszukaj użytkownika")
-        self.setFixedSize(900, 500)
-        self.setModal(True)
-        self.selected_user_data = None
-        self.entries = {}
-        self.filter_boxes = {}
-        self.labels = ["NR KADROWY", "IMIE", "NAZWISKO", "RODZAJ ZATRUDNIENIA", "LOKALIZACJA", "ID_UZYTKOWNIKA"]
-        self._build_ui()
-
-    def _build_ui(self):
-        layout = QVBoxLayout(self)
-
-        self.filter_scroll = QScrollArea()
-        self.filter_scroll.setWidgetResizable(True)
-        self.filter_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.filter_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.filter_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self.filter_scroll.setFixedHeight(60)
-
-        self.filter_container = QWidget()
-        self.filter_layout = QHBoxLayout(self.filter_container)
-        self.filter_layout.setSpacing(0)
-        self.filter_layout.setContentsMargins(0, 0, 0, 0)
-
-        self.v_header_spacer = QWidget()
-        self.filter_layout.addWidget(self.v_header_spacer)
-
-        for col in self.labels:
-            box = QWidget()
-            box_layout = QVBoxLayout(box)
-            box_layout.setContentsMargins(2, 0, 2, 0)
-            box_layout.setSpacing(2)
-
-            if col not in ("ID", "ID_UZYTKOWNIKA"):
-                title_lbl = QLabel(DISPLAY_NAMES.get(col, col))
-                title_lbl.setStyleSheet(
-                    "font-size: 10px; color: gray; font-weight: bold; background: transparent; border: none;")
-                box_layout.addWidget(title_lbl)
-
-                entry = QLineEdit()
-                entry.textChanged.connect(self._dynamic_search)
-                self.entries[col] = entry
-                box_layout.addWidget(entry)
-            else:
-                box_layout.addStretch()
-
-            self.filter_layout.addWidget(box)
-            self.filter_boxes[col] = box
-
-        self.filter_layout.addStretch()
-        self.filter_scroll.setWidget(self.filter_container)
-        layout.addWidget(self.filter_scroll)
-
-        self.table = InteractiveTableWidget()
-        self.table.setColumnCount(len(self.labels))
-        self.table.setHorizontalHeaderLabels([DISPLAY_NAMES.get(c, c) for c in self.labels])
-        self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
-
-        for i, col_name in enumerate(self.labels):
-            if col_name in ("ID", "ID_UZYTKOWNIKA"):
-                self.table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
-
-        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.itemDoubleClicked.connect(self._select_user)
-
-        self.filter_layout.setContentsMargins(self.table.frameWidth(), 0, 0, 0)
-        layout.addWidget(self.table)
-
-        btn = QPushButton("Wybierz użytkownika")
-        btn.setStyleSheet("background-color: lightgreen; font-weight: bold; padding: 10px;")
-        btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.clicked.connect(self._select_user)
-        layout.addWidget(btn)
-
-        self.table.horizontalHeader().sectionResized.connect(self._sync_filter_widths)
-        self.table.horizontalHeader().geometriesChanged.connect(self._sync_filter_widths)
-        self.table.horizontalScrollBar().valueChanged.connect(self.filter_scroll.horizontalScrollBar().setValue)
-
-    def showEvent(self, event):
-        super().showEvent(event)
-        QTimer.singleShot(10, self._sync_filter_widths)
-
-    def _sync_filter_widths(self, *args):
-        if not hasattr(self, 'table'): return
-        hw = self.table.verticalHeader().width() if self.table.verticalHeader().isVisible() else 0
-        fw = self.table.frameWidth()
-        self.v_header_spacer.setFixedWidth(hw + fw)
-
-        for i, col in enumerate(self.labels):
-            if col in self.filter_boxes:
-                self.filter_boxes[col].setFixedWidth(self.table.columnWidth(i))
-
-    def _dynamic_search(self):
-        search_values = {lbl: entry.text() for lbl, entry in self.entries.items()}
-        try:
-            rows = db.search_users_advanced(search_values)
-            self.table.setRowCount(len(rows))
-            for r_idx, row in enumerate(rows):
-                for c_idx, val in enumerate(row):
-                    self.table.setItem(r_idx, c_idx, QTableWidgetItem(str(val) if val else ""))
-        except Exception:
-            pass
-
-    def _select_user(self):
-        selected = self.table.selectionModel().selectedRows()
-        if not selected:
-            QMessageBox.warning(self, "Błąd", "Nie wybrano użytkownika z listy.")
-            return
-        row = selected[0].row()
-        self.selected_user_data = {self.labels[i]: self.table.item(row, i).text() for i in range(len(self.labels)) if
-                                   self.table.item(row, i)}
-        self.accept()
-
-
-# =========================================================================
-# GŁÓWNY WIDŻET SEKCJI SPRZĘTU UŻYTKOWNIKA (DYNAMICZNY)
-# =========================================================================
-
-class UserEquipmentWidget(QScrollArea):
-    def __init__(self, parent_app):
-        super().__init__()
-        self.parent_app = parent_app
-        self.setWidgetResizable(True)
-        self.setStyleSheet("QScrollArea { border: none; background-color: #f0f0f0; }")
-
-        self.content_widget = BackgroundWidget(parent_app)
-        self.layout = QVBoxLayout(self.content_widget)
-        self.layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.layout.setContentsMargins(10, 10, 10, 10)
-        self.layout.setSpacing(10)
-        self.setWidget(self.content_widget)
-
-        self.asset_tables = {}
-
-    def create_table_group(self, title, fetch_fn, user_id, cols, sec_key):
-        group_box = QGroupBox(title)
-
-        layout = QVBoxLayout(group_box)
-        layout.setContentsMargins(8, 20, 8, 8)
-
-        table = InteractiveTableWidget()
-        table.db_columns = cols
-        table.setColumnCount(len(cols))
-        table.setHorizontalHeaderLabels([DISPLAY_NAMES.get(c, c) for c in cols])
-
-        table.verticalHeader().setVisible(False)
-        table.setAlternatingRowColors(True)
-
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
-
-        for i, col_name in enumerate(cols):
-            if col_name in ("ID", "ID_UZYTKOWNIKA"):
-                table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
-
-        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-
-        try:
-            rows = fetch_fn(int(user_id))
-        except Exception:
-            rows = []
-
-        table.setUpdatesEnabled(False)
-        table.blockSignals(True)
-        table.setSortingEnabled(False)
-
-        table.setRowCount(len(rows))
-        for r_idx, row in enumerate(rows):
-            for c_idx, val in enumerate(row):
-                table.setItem(r_idx, c_idx, QTableWidgetItem(str(val) if val is not None else ""))
-
-        table.blockSignals(False)
-        table.setUpdatesEnabled(True)
-
-        table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        table.customContextMenuRequested.connect(lambda pos, t=table: self.parent_app.show_context_menu(pos, t))
-        table.itemSelectionChanged.connect(lambda s="UŻYTKOWNIK": self.parent_app.update_right_buttons(s))
-
-        table.setMinimumHeight(max(70, 40 + (len(rows) * 30)))
-
-        layout.addWidget(table)
-        self.asset_tables[sec_key] = table
-        return group_box
-
-    def load_user_assets(self, user_id):
-        for i in reversed(range(self.layout.count())):
-            item = self.layout.itemAt(i)
-            if item.widget():
-                item.widget().deleteLater()
-            elif item.layout():
-                while item.layout().count():
-                    child = item.layout().takeAt(0)
-                    if child.widget():
-                        child.widget().deleteLater()
-                item.layout().deleteLater()
-
-        self.asset_tables.clear()
-
-        if not user_id or str(user_id) == "-":
-            return
-
-        import sprzet_queries as db
-
-        self.layout.addWidget(self.create_table_group("Laptopy", db.get_laptopy_uzytkownika, user_id,
-                                                      ["STATUS", "NR SRODKA TRWALEGO", "NAZWA LAPTOPA", "NR SERYJNY",
-                                                       "MODEL", "NR SDJ", "UWAGI", "ID_UZYTKOWNIKA", "ID"], "LAPTOPY"))
-
-        self.layout.addWidget(self.create_table_group("Telefony", db.get_telefony_uzytkownika, user_id,
-                                                      ["STATUS", "IMEI", "LADOWARKA", "KABEL USB C",
-                                                       "LADOWARKA INDUKCYJNA", "PRZEJSCIOWKA DO TELEFONU", "ETUI",
-                                                       "NR TELEFONU", "MODEL", "NR SDJ", "UWAGI", "ID_UZYTKOWNIKA",
-                                                       "ID"], "TELEFONY"))
-
-        self.layout.addWidget(self.create_table_group("Routery", db.get_router_uzytkownika, user_id,
-                                                      ["STATUS", "IMEI", "NR TELEFONU", "NR SIM", "OPERATOR", "NR SDJ",
-                                                       "UWAGI", "ID_UZYTKOWNIKA", "ID"], "ROUTER"))
-
-        self.layout.addWidget(self.create_table_group("Karty SIM", db.get_karty_sim_uzytkownika, user_id,
-                                                      ["STATUS", "NR TELEFONU", "NR SIM", "OPERATOR", "NR SDJ", "UWAGI",
-                                                       "ID_UZYTKOWNIKA", "ID"], "KARTY SIM"))
-
-        hbox_mon_slu = QHBoxLayout()
-        hbox_mon_slu.addWidget(self.create_table_group("Monitory", db.get_monitory_uzytkownika, user_id,
-                                                       ["STATUS", "NR SERYJNY", "MODEL", "NR SDJ", "UWAGI",
-                                                        "ID_UZYTKOWNIKA", "ID"], "MONITORY"))
-        hbox_mon_slu.addWidget(self.create_table_group("Słuchawki", db.get_sluchawki_uzytkownika, user_id,
-                                                       ["STATUS", "NR SERYJNY", "MODEL", "NR SDJ", "UWAGI",
-                                                        "ID_UZYTKOWNIKA", "ID"], "SŁUCHAWKI"))
-        self.layout.addLayout(hbox_mon_slu)
-
-        hbox_mysz_klaw = QHBoxLayout()
-        hbox_mysz_klaw.addWidget(self.create_table_group("Myszki", db.get_myszki_uzytkownika, user_id,
-                                                         ["STATUS", "NR SDJ", "UWAGI", "ID_UZYTKOWNIKA", "ID"],
-                                                         "MYSZKI"))
-        hbox_mysz_klaw.addWidget(self.create_table_group("Klawiatury", db.get_klawiatury_uzytkownika, user_id,
-                                                         ["STATUS", "NR SDJ", "UWAGI", "ID_UZYTKOWNIKA", "ID"],
-                                                         "KLAWIATURY"))
-        self.layout.addLayout(hbox_mysz_klaw)
-
-        self.layout.addStretch()
-
-
-class DataTableModel(QAbstractTableModel):
-    def __init__(self, data, headers):
-        super().__init__()
-        self._data = data
-        self._headers = headers
-
-    def data(self, index, role):
-        if not index.isValid():
-            return None
-        if role == Qt.ItemDataRole.DisplayRole:
-            val = self._data[index.row()][index.column()]
-            return str(val) if val is not None else ""
-        elif role == Qt.ItemDataRole.TextAlignmentRole:
-            return Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-        return None
-
-    def rowCount(self, index=QModelIndex()):
-        return len(self._data)
-
-    def columnCount(self, index=QModelIndex()):
-        return len(self._headers)
-
-    def headerData(self, section, orientation, role):
-        if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal:
-            return self._headers[section]
-        return None
-
-    def update_data(self, new_data):
-        self.beginResetModel()
-        self._data = new_data
-        self.endResetModel()
-
-    def get_row_data(self, row_idx):
-        return self._data[row_idx]
-
-
-class MultiFilterProxyModel(QSortFilterProxyModel):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.filters = {}
-
-    def set_filters(self, filters):
-        self.filters = filters
-        self.invalidateFilter()
-
-    def filterAcceptsRow(self, source_row, source_parent):
-        if not self.filters:
-            return True
-        for col_idx, f_val in self.filters.items():
-            idx = self.sourceModel().index(source_row, col_idx, source_parent)
-            data = self.sourceModel().data(idx, Qt.ItemDataRole.DisplayRole)
-            if data and f_val not in str(data).lower():
-                return False
-        return True
-
-
-# =========================================================================
-# GŁÓWNY WIDŻET SEKCJI (ZAKŁADKI GŁÓWNE)
-# =========================================================================
-
-class SectionWidget(BackgroundWidget):
-    def __init__(self, section_name, fetch_method, columns, parent_app):
-        super().__init__(parent_app)
-        self.section_name = section_name
-        self.fetch_method = fetch_method
-        self.columns = columns
-        self.filter_entries = {}
-        self.filter_boxes = {}
-        self._build_ui()
-
-    def _build_ui(self):
-        layout = QVBoxLayout(self)
-
-        self.filter_scroll = QScrollArea()
-        self.filter_scroll.setWidgetResizable(True)
-        self.filter_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.filter_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.filter_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self.filter_scroll.setFixedHeight(60)
-
-        self.filter_container = QWidget()
-        self.filter_layout = QHBoxLayout(self.filter_container)
-        self.filter_layout.setSpacing(0)
-        self.filter_layout.setContentsMargins(0, 0, 0, 0)
-
-        self.v_header_spacer = QWidget()
-        self.filter_layout.addWidget(self.v_header_spacer)
-
-        for col in self.columns:
-            box = QWidget()
-            box_layout = QVBoxLayout(box)
-            box_layout.setContentsMargins(2, 0, 2, 0)
-            box_layout.setSpacing(2)
-
-            if col not in ("ID", "ID_UZYTKOWNIKA"):
-                lbl = QLabel(DISPLAY_NAMES.get(col, col))
-                lbl.setStyleSheet(
-                    "font-size: 10px; color: gray; font-weight: bold; background: transparent; border: none;")
-                box_layout.addWidget(lbl)
-
-                entry = QLineEdit()
-                entry.textChanged.connect(self.filter_data)
-                self.filter_entries[col] = entry
-                box_layout.addWidget(entry)
-            else:
-                box_layout.addStretch()
-
-            self.filter_layout.addWidget(box)
-            self.filter_boxes[col] = box
-
-        self.filter_layout.addStretch()
-        self.filter_scroll.setWidget(self.filter_container)
-        layout.addWidget(self.filter_scroll)
-
-        # --- TABELA OPARTA NA MODELU I INTERAKTYWNYM SKALOWANIU CZCIONKI ---
-        self.table = InteractiveTableView()
-        self.table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QTableView.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(QTableView.EditTrigger.NoEditTriggers)
-        self.table.setAlternatingRowColors(False)
-        self.table.verticalHeader().setVisible(False)
-
-        headers = [DISPLAY_NAMES.get(c, c) for c in self.columns]
-        self.source_model = DataTableModel([], headers)
-        self.proxy_model = MultiFilterProxyModel(self)
-        self.proxy_model.setSourceModel(self.source_model)
-        self.table.setModel(self.proxy_model)
-
-        # --- CZYSTY STRETCH NAGŁÓWKÓW ---
-        header = self.table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        for i, col_name in enumerate(self.columns):
-            if col_name in ("ID", "ID_UZYTKOWNIKA"):
-                header.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
-
-        self.table.selectionModel().selectionChanged.connect(
-            lambda: self.parent_app.update_right_buttons(self.section_name))
-        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.table.customContextMenuRequested.connect(lambda pos: self.parent_app.show_context_menu(pos, self.table))
-
-        self.filter_layout.setContentsMargins(self.table.frameWidth(), 0, 0, 0)
-        layout.addWidget(self.table)
-
-        self.lbl_count = QLabel("Licznik: 0")
-        self.lbl_count.setStyleSheet(
-            "font-weight: bold; font-size: 12px; padding: 2px; background: transparent; border: none;")
-        layout.addWidget(self.lbl_count)
-
-        self.table.horizontalHeader().sectionResized.connect(self._sync_filter_widths)
-        self.table.horizontalHeader().geometriesChanged.connect(self._sync_filter_widths)
-        self.table.horizontalScrollBar().valueChanged.connect(self.filter_scroll.horizontalScrollBar().setValue)
-
-    def showEvent(self, event):
-        super().showEvent(event)
-        QTimer.singleShot(10, self._sync_filter_widths)
-
-    def _sync_filter_widths(self, *args):
-        if not hasattr(self, 'table'): return
-        hw = self.table.verticalHeader().width() if self.table.verticalHeader().isVisible() else 0
-        fw = self.table.frameWidth()
-        self.v_header_spacer.setFixedWidth(hw + fw)
-
-        for i, col in enumerate(self.columns):
-            if col in self.filter_boxes:
-                self.filter_boxes[col].setFixedWidth(self.table.columnWidth(i))
-
-    def load_data(self):
-        rows = self.fetch_method()
-        self.source_model.update_data(rows)
-        self.update_count()
-        QTimer.singleShot(10, self._sync_filter_widths)
-
-    def filter_data(self):
-        active_filters = {}
-        for col_name, entry in self.filter_entries.items():
-            text = entry.text().strip().lower()
-            if text:
-                col_idx = self.columns.index(col_name)
-                active_filters[col_idx] = text
-
-        self.proxy_model.set_filters(active_filters)
-        self.update_count()
-
-    def update_count(self):
-        visible = self.proxy_model.rowCount()
-        self.lbl_count.setText(f"Licznik: {visible}")
-
-    def get_selected_record_data(self):
-        selected = self.table.selectionModel().selectedRows()
-        if not selected: return None
-
-        proxy_index = selected[0]
-        source_index = self.proxy_model.mapToSource(proxy_index)
-
-        row_data = self.source_model.get_row_data(source_index.row())
-        return {self.columns[i]: str(row_data[i]) if row_data[i] is not None else "" for i in range(len(self.columns))}
-
-
-# =========================================================================
-# GŁÓWNA APLIKACJA
-# =========================================================================
 
 class Application(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("mSprzęt")
         self.setMinimumSize(1200, 600)
+
+        # --- ZABEZPIECZENIE ŚCIEŻKI IKONY DLA PYINSTALLERA ---
+        def resource_path(relative_path):
+            """ Zwraca absolutną ścieżkę do pliku, działa w dev i w skompilowanym .exe """
+            try:
+                # PyInstaller tworzy folder w %TEMP% i przechowuje ścieżkę w _MEIPASS
+                base_path = sys._MEIPASS
+            except Exception:
+                base_path = os.path.abspath(".")
+            return os.path.join(base_path, relative_path)
+
+        # Ustawienie ikony okna i paska zadań
+        icon_path = resource_path(APP_ICON)
+        self.setWindowIcon(QIcon(icon_path))
+        # -----------------------------------------------------
+
         self.user_values = {}
         self.sections_widgets = {}
         self.current_section = None
@@ -769,9 +72,8 @@ class Application(QMainWindow):
             "ROUTER": ("mSPRZET_ROUTER", db.get_all_router,
                        ["NR KADROWY", "IMIE", "NAZWISKO", "STATUS", "IMEI", "NR TELEFONU", "NR SIM", "OPERATOR",
                         "NR SDJ", "UWAGI", "ID"]),
-            "MYSZKI": (
-                "mSPRZET_MYSZKI", db.get_all_myszki,
-                ["NR KADROWY", "IMIE", "NAZWISKO", "STATUS", "NR SDJ", "UWAGI", "ID"]),
+            "MYSZKI": ("mSPRZET_MYSZKI", db.get_all_myszki,
+                       ["NR KADROWY", "IMIE", "NAZWISKO", "STATUS", "NR SDJ", "UWAGI", "ID"]),
             "KLAWIATURY": ("mSPRZET_KLAWIATURY", db.get_all_klawiatury,
                            ["NR KADROWY", "IMIE", "NAZWISKO", "STATUS", "NR SDJ", "UWAGI", "ID"]),
             "KONTA UŻYTKOWNIKÓW": ("mSPRZET_KONTA_UZYTKOWNIKOW", db.get_all_konta,
@@ -839,7 +141,7 @@ class Application(QMainWindow):
             box.addWidget(label_title)
             val_lbl = QLabel("-")
             val_lbl.setStyleSheet(
-                "color: red; font-weight: bold; font-size: 14px; background: transparent; border: none;")
+                "color: red; font-weight: bold; font-size: 11pt; background: transparent; border: none;")
             self.user_values[db_col] = val_lbl
             box.addWidget(val_lbl)
             user_info_layout.addLayout(box)
@@ -940,7 +242,6 @@ class Application(QMainWindow):
             self.right_layout.addWidget(btn_import)
 
         actions = self._get_actions_for_section(section)
-
         req_selection = ["EDYTUJ", "USUŃ", "POKAŻ SPRZĘT", "ODEPNIJ"]
         context_actions = [a for a in actions if any(req in a[0].upper() for req in req_selection)]
 
@@ -1007,7 +308,6 @@ class Application(QMainWindow):
         btn_no = msg_box.addButton("Nie", QMessageBox.ButtonRole.NoRole)
         btn_yes.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_no.setCursor(Qt.CursorShape.PointingHandCursor)
-
         msg_box.exec()
         return msg_box.clickedButton() == btn_yes
 
@@ -1052,7 +352,7 @@ class Application(QMainWindow):
         for k, v in self.user_values.items():
             v.setText(data.get(k, ""))
             v.setStyleSheet(
-                "color: midnightblue; font-weight: bold; font-size: 14px; background: transparent; border: none;")
+                "color: midnightblue; font-weight: bold; font-size: 11pt; background: transparent; border: none;")
 
         self.btn_uzytkownik_tab.show()
         self.show_frame("UŻYTKOWNIK")
@@ -1092,9 +392,7 @@ class Application(QMainWindow):
     def _open_record_dialog(self, section, record_id, initial_data, custom_callback=None):
         table_name = self.section_config[section][0]
         fields_config = self._get_fields_config(section)
-
         cb = custom_callback if custom_callback else lambda: self.sections_widgets[section].load_data()
-
         dlg = RecordDialog(self, f"{'Edytuj' if record_id else 'Dodaj'} - {section}", fields_config, table_name, [], cb,
                            record_id, initial_data)
         dlg.exec()
@@ -1236,7 +534,6 @@ class Application(QMainWindow):
         headers = []
         for i in range(model.columnCount()):
             h_data = model.headerData(i, Qt.Orientation.Horizontal, Qt.ItemDataRole.DisplayRole)
-            # Usuwamy entery przy kopiowaniu, aby Excel łapał to jako jeden ciąg
             h_clean = str(h_data).replace('\n', ' ') if h_data else ""
             headers.append(h_clean)
 
@@ -1270,7 +567,6 @@ class Application(QMainWindow):
             QMessageBox.warning(self, "Błąd", "Użytkownik nie ma przypisanego laptopa.")
             return
 
-        # Zmiana: Szukamy, czy użytkownik zaznaczył konkretny laptop na liście
         selected_laptop = None
         if "LAPTOPY" in self.user_equipment_view.asset_tables:
             laptop_table = self.user_equipment_view.asset_tables["LAPTOPY"]
@@ -1286,14 +582,12 @@ class Application(QMainWindow):
                     "NR_SDJ": laptop_table.item(row, 5).text() if laptop_table.item(row, 5) else ""
                 }
 
-        # Jeśli nie zaznaczył, a ma więcej niż 1 - wymuszamy wybór
         if not selected_laptop:
             if len(laptopy) > 1:
                 QMessageBox.warning(self, "Wymagany wybór",
                                     "Użytkownik ma przypisany więcej niż jeden laptop. Zaznacz odpowiedni sprzęt na liście przed wygenerowaniem oświadczenia.")
                 return
             else:
-                # Jak ma tylko 1, bierzemy domyślnie ten pierwszy
                 l = laptopy[0]
                 selected_laptop = {"STATUS": l[0], "NR_SRODKA_TRWALEGO": l[1], "NAZWA_LAPTOPA": l[2],
                                    "NR_SERYJNY": l[3], "MODEL": l[4], "NR_SDJ": l[5]}
@@ -1328,7 +622,6 @@ class Application(QMainWindow):
         db_cols = [c for c in all_cols if c not in ("ID", "ID_UZYTKOWNIKA", "NR KADROWY", "IMIE", "NAZWISKO")]
 
         unique_keys = []
-
         if section == "KONTA UŻYTKOWNIKÓW":
             db_cols = ["NR KADROWY", "IMIE", "NAZWISKO", "RODZAJ ZATRUDNIENIA", "LOKALIZACJA"]
             unique_keys = ["NR KADROWY"]
@@ -1356,7 +649,6 @@ class Application(QMainWindow):
 
         try:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-
             existing_data = {}
             if section == "KONTA UŻYTKOWNIKÓW":
                 existing_data = {"NR KADROWY": {str(r[0]).strip().upper() for r in db.get_all_konta() if r[0]}}
@@ -1420,3 +712,14 @@ class Application(QMainWindow):
                 QMessageBox.critical(self, "Błąd", str(e))
             finally:
                 QApplication.restoreOverrideCursor()
+
+    def closeEvent(self, event):
+        """Metoda wywoływana, gdy użytkownik próbuje zamknąć okno aplikacji."""
+        for sec_widget in self.sections_widgets.values():
+            if hasattr(sec_widget, 'worker') and sec_widget.worker and sec_widget.worker.isRunning():
+                # Sygnalizujemy wątkowi, żeby przestał wysyłać sygnały
+                sec_widget.worker.is_cancelled = True
+                # Dajemy mu ułamek sekundy na kulturalne zamknięcie się
+                sec_widget.worker.wait(500)
+
+        event.accept()  # Zezwalamy na zamknięcie okna

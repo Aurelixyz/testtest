@@ -1,0 +1,18 @@
+@echo off
+echo Uruchamianie aplikacji mSprzet...
+
+:: 1. Ustawienie ścieżek (ZMIEN NETWORK_PATH NA SWOJĄ PRAWDZIWĄ ŚCIEŻKĘ SIECIOWĄ!)
+set "NETWORK_PATH=\\TWOJ_SERWER\udzial\IT\mSprzet\mSprzet.exe"
+set "LOCAL_DIR=C:\mSprzet_App"
+set "LOCAL_PATH=%LOCAL_DIR%\mSprzet.exe"
+
+:: 2. Tworzymy folder docelowy na dysku C:, jeśli nie istnieje
+if not exist "%LOCAL_DIR%" mkdir "%LOCAL_DIR%"
+
+:: 3. INTELIGENTNE KOPIOWANIE
+:: /D - kopiuje tylko wtedy, gdy plik na serwerze jest nowszy
+:: /Y - zgadza się na nadpisanie bez pytania
+xcopy "%NETWORK_PATH%" "%LOCAL_DIR%\" /D /Y >nul 2>&1
+
+:: 4. Uruchomienie aplikacji
+start "" "%LOCAL_PATH%"

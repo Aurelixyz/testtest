@@ -31,5 +31,5 @@ TABLE_STATUSY_LOKALIZACJA  = f"{DB_SCHEMA}.[mSPRZET_STATUSY_LOKALIZACJA]"
 
 # === Aplikacja ===
 APP_TITLE   = "mSprzęt"
-APP_ICON    = "app.ico"
-APP_VERSION = "2.0.1"
+APP_ICON    = "msprzet.ico"
+APP_VERSION = "3"

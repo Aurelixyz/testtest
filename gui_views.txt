@@ -1,0 +1,303 @@
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+                             QTableWidget, QTableWidgetItem, QHeaderView,
+                             QLineEdit, QScrollArea, QFrame, QGroupBox, QMessageBox)
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
+from PyQt6.QtWidgets import QTableView
+
+from gui_shared import (DISPLAY_NAMES, BackgroundWidget, InteractiveTableWidget,
+                        InteractiveTableView, DataTableModel, MultiFilterProxyModel)
+import sprzet_queries as db
+
+
+# =====================================================================
+# WĄTEK W TLE (WORKER) DO BEZPIECZNEGO ŁADOWANIA DANYCH Z BAZY
+# =====================================================================
+class DataLoaderWorker(QThread):
+    data_ready = pyqtSignal(list)
+    error_occurred = pyqtSignal(str)
+
+    def __init__(self, fetch_method):
+        super().__init__()
+        self.fetch_method = fetch_method
+        self.is_cancelled = False  # Flaga zabezpieczająca przed wyciekami danych
+
+    def run(self):
+        try:
+            # Tu wykonywane jest zapytanie, które działa w tle (nie blokuje GUI)
+            rows = self.fetch_method()
+            # Jeśli wątek nie został anulowany w międzyczasie, wysyłamy dane
+            if not self.is_cancelled:
+                self.data_ready.emit(rows)
+        except Exception as e:
+            if not self.is_cancelled:
+                self.error_occurred.emit(str(e))
+
+
+# =====================================================================
+# KLASA WIDOKU SPRZĘTU UŻYTKOWNIKA (BEZ ZMIAN)
+# =====================================================================
+class UserEquipmentWidget(QScrollArea):
+    def __init__(self, parent_app):
+        super().__init__()
+        self.parent_app = parent_app
+        self.setWidgetResizable(True)
+        self.setStyleSheet("QScrollArea { border: none; background-color: #f0f0f0; }")
+
+        self.content_widget = BackgroundWidget(parent_app)
+        self.layout = QVBoxLayout(self.content_widget)
+        self.layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.layout.setContentsMargins(10, 10, 10, 10)
+        self.layout.setSpacing(10)
+        self.setWidget(self.content_widget)
+        self.asset_tables = {}
+
+    def create_table_group(self, title, fetch_fn, user_id, cols, sec_key):
+        group_box = QGroupBox(title)
+        layout = QVBoxLayout(group_box)
+        layout.setContentsMargins(8, 20, 8, 8)
+
+        table = InteractiveTableWidget()
+        table.db_columns = cols
+        table.setColumnCount(len(cols))
+        table.setHorizontalHeaderLabels([DISPLAY_NAMES.get(c, c) for c in cols])
+
+        table.verticalHeader().setVisible(False)
+        table.setAlternatingRowColors(True)
+
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+
+        for i, col_name in enumerate(cols):
+            if col_name in ("ID", "ID_UZYTKOWNIKA"):
+                table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
+
+        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
+        try:
+            rows = fetch_fn(int(user_id))
+        except Exception:
+            rows = []
+
+        table.setUpdatesEnabled(False)
+        table.blockSignals(True)
+        table.setSortingEnabled(False)
+
+        table.setRowCount(len(rows))
+        for r_idx, row in enumerate(rows):
+            for c_idx, val in enumerate(row):
+                table.setItem(r_idx, c_idx, QTableWidgetItem(str(val) if val is not None else ""))
+
+        table.blockSignals(False)
+        table.setUpdatesEnabled(True)
+
+        table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        table.customContextMenuRequested.connect(lambda pos, t=table: self.parent_app.show_context_menu(pos, t))
+        table.itemSelectionChanged.connect(lambda s="UŻYTKOWNIK": self.parent_app.update_right_buttons(s))
+
+        table.setMinimumHeight(max(70, 40 + (len(rows) * 30)))
+        layout.addWidget(table)
+        self.asset_tables[sec_key] = table
+        return group_box
+
+    def load_user_assets(self, user_id):
+        for i in reversed(range(self.layout.count())):
+            item = self.layout.itemAt(i)
+            if item.widget():
+                item.widget().deleteLater()
+            elif item.layout():
+                while item.layout().count():
+                    child = item.layout().takeAt(0)
+                    if child.widget():
+                        child.widget().deleteLater()
+                item.layout().deleteLater()
+
+        self.asset_tables.clear()
+        if not user_id or str(user_id) == "-": return
+
+        self.layout.addWidget(self.create_table_group("Laptopy", db.get_laptopy_uzytkownika, user_id,
+                                                      ["STATUS", "NR SRODKA TRWALEGO", "NAZWA LAPTOPA", "NR SERYJNY", "MODEL", "NR SDJ", "UWAGI", "ID_UZYTKOWNIKA", "ID"], "LAPTOPY"))
+        self.layout.addWidget(self.create_table_group("Telefony", db.get_telefony_uzytkownika, user_id,
+                                                      ["STATUS", "IMEI", "LADOWARKA", "KABEL USB C", "LADOWARKA INDUKCYJNA", "PRZEJSCIOWKA DO TELEFONU", "ETUI", "NR TELEFONU", "MODEL", "NR SDJ", "UWAGI", "ID_UZYTKOWNIKA", "ID"], "TELEFONY"))
+        self.layout.addWidget(self.create_table_group("Routery", db.get_router_uzytkownika, user_id,
+                                                      ["STATUS", "IMEI", "NR TELEFONU", "NR SIM", "OPERATOR", "NR SDJ", "UWAGI", "ID_UZYTKOWNIKA", "ID"], "ROUTER"))
+        self.layout.addWidget(self.create_table_group("Karty SIM", db.get_karty_sim_uzytkownika, user_id,
+                                                      ["STATUS", "NR TELEFONU", "NR SIM", "OPERATOR", "NR SDJ", "UWAGI", "ID_UZYTKOWNIKA", "ID"], "KARTY SIM"))
+
+        hbox_mon_slu = QHBoxLayout()
+        hbox_mon_slu.addWidget(self.create_table_group("Monitory", db.get_monitory_uzytkownika, user_id,
+                                                       ["STATUS", "NR SERYJNY", "MODEL", "NR SDJ", "UWAGI", "ID_UZYTKOWNIKA", "ID"], "MONITORY"))
+        hbox_mon_slu.addWidget(self.create_table_group("Słuchawki", db.get_sluchawki_uzytkownika, user_id,
+                                                       ["STATUS", "NR SERYJNY", "MODEL", "NR SDJ", "UWAGI", "ID_UZYTKOWNIKA", "ID"], "SŁUCHAWKI"))
+        self.layout.addLayout(hbox_mon_slu)
+
+        hbox_mysz_klaw = QHBoxLayout()
+        hbox_mysz_klaw.addWidget(self.create_table_group("Myszki", db.get_myszki_uzytkownika, user_id,
+                                                         ["STATUS", "NR SDJ", "UWAGI", "ID_UZYTKOWNIKA", "ID"], "MYSZKI"))
+        hbox_mysz_klaw.addWidget(self.create_table_group("Klawiatury", db.get_klawiatury_uzytkownika, user_id,
+                                                         ["STATUS", "NR SDJ", "UWAGI", "ID_UZYTKOWNIKA", "ID"], "KLAWIATURY"))
+        self.layout.addLayout(hbox_mysz_klaw)
+        self.layout.addStretch()
+
+
+# =====================================================================
+# ZMODYFIKOWANA KLASA ZAKŁADEK (WIELOWĄTKOWE ŁADOWANIE)
+# =====================================================================
+class SectionWidget(BackgroundWidget):
+    def __init__(self, section_name, fetch_method, columns, parent_app):
+        super().__init__(parent_app)
+        self.section_name = section_name
+        self.fetch_method = fetch_method
+        self.columns = columns
+        self.filter_entries = {}
+        self.filter_boxes = {}
+        self.worker = None  # Przechowuje nasz wątek w tle
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+
+        self.filter_scroll = QScrollArea()
+        self.filter_scroll.setWidgetResizable(True)
+        self.filter_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.filter_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.filter_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.filter_scroll.setFixedHeight(60)
+
+        self.filter_container = QWidget()
+        self.filter_layout = QHBoxLayout(self.filter_container)
+        self.filter_layout.setSpacing(0)
+        self.filter_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.v_header_spacer = QWidget()
+        self.filter_layout.addWidget(self.v_header_spacer)
+
+        for col in self.columns:
+            box = QWidget()
+            box_layout = QVBoxLayout(box)
+            box_layout.setContentsMargins(2, 0, 2, 0)
+            box_layout.setSpacing(2)
+
+            if col not in ("ID", "ID_UZYTKOWNIKA"):
+                lbl = QLabel(DISPLAY_NAMES.get(col, col))
+                lbl.setStyleSheet("font-size: 8pt; color: gray; font-weight: bold; background: transparent; border: none;")
+                box_layout.addWidget(lbl)
+
+                entry = QLineEdit()
+                entry.textChanged.connect(self.filter_data)
+                self.filter_entries[col] = entry
+                box_layout.addWidget(entry)
+            else:
+                box_layout.addStretch()
+
+            self.filter_layout.addWidget(box)
+            self.filter_boxes[col] = box
+
+        self.filter_layout.addStretch()
+        self.filter_scroll.setWidget(self.filter_container)
+        layout.addWidget(self.filter_scroll)
+
+        self.table = InteractiveTableView()
+        self.table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QTableView.SelectionMode.SingleSelection)
+        self.table.setEditTriggers(QTableView.EditTrigger.NoEditTriggers)
+        self.table.setAlternatingRowColors(False)
+        self.table.verticalHeader().setVisible(False)
+
+        headers = [DISPLAY_NAMES.get(c, c) for c in self.columns]
+        self.source_model = DataTableModel([], headers)
+        self.proxy_model = MultiFilterProxyModel(self)
+        self.proxy_model.setSourceModel(self.source_model)
+        self.table.setModel(self.proxy_model)
+
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        for i, col_name in enumerate(self.columns):
+            if col_name in ("ID", "ID_UZYTKOWNIKA"):
+                header.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
+
+        self.table.selectionModel().selectionChanged.connect(
+            lambda: self.parent_app.update_right_buttons(self.section_name))
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(lambda pos: self.parent_app.show_context_menu(pos, self.table))
+
+        self.filter_layout.setContentsMargins(self.table.frameWidth(), 0, 0, 0)
+        layout.addWidget(self.table)
+
+        self.lbl_count = QLabel("Licznik: 0")
+        self.lbl_count.setStyleSheet("font-weight: bold; font-size: 9pt; padding: 2px; background: transparent; border: none;")
+        layout.addWidget(self.lbl_count)
+
+        self.table.horizontalHeader().sectionResized.connect(self._sync_filter_widths)
+        self.table.horizontalHeader().geometriesChanged.connect(self._sync_filter_widths)
+        self.table.horizontalScrollBar().valueChanged.connect(self.filter_scroll.horizontalScrollBar().setValue)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        QTimer.singleShot(10, self._sync_filter_widths)
+
+    def _sync_filter_widths(self, *args):
+        if not hasattr(self, 'table'): return
+        hw = self.table.verticalHeader().width() if self.table.verticalHeader().isVisible() else 0
+        fw = self.table.frameWidth()
+        self.v_header_spacer.setFixedWidth(hw + fw)
+
+        for i, col in enumerate(self.columns):
+            if col in self.filter_boxes:
+                self.filter_boxes[col].setFixedWidth(self.table.columnWidth(i))
+
+    # =====================================================================
+    # NOWY MECHANIZM ŁADOWANIA W TLE (WORKER)
+    # =====================================================================
+    def load_data(self):
+        # 1. Zabezpieczenie: jeśli wątek już działa (bo użytkownik szybko przeklikał), oznaczamy stary jako anulowany
+        if self.worker and self.worker.isRunning():
+            self.worker.is_cancelled = True
+
+        # 2. Informujemy użytkownika i delikatnie przygaszamy tabelę
+        self.lbl_count.setText("Licznik: Pobieranie danych z bazy...")
+        self.table.setEnabled(False)
+
+        # 3. Tworzymy i uruchamiamy nowego kucharza
+        self.worker = DataLoaderWorker(self.fetch_method)
+        self.worker.data_ready.connect(self._on_data_loaded)
+        self.worker.error_occurred.connect(self._on_data_error)
+        self.worker.start()
+
+    def _on_data_loaded(self, rows):
+        # 4. Kucharz skończył pracę (dane przyszły) - aktualizujemy tabelę
+        self.source_model.update_data(rows)
+        self.table.setEnabled(True)  # Odblokowanie tabeli
+        self.update_count()
+        QTimer.singleShot(10, self._sync_filter_widths)
+
+    def _on_data_error(self, error_msg):
+        # 5. Jeśli coś poszło nie tak
+        self.lbl_count.setText("Licznik: Błąd pobierania")
+        self.table.setEnabled(True)
+        QMessageBox.critical(self, "Błąd Bazy Danych", f"Nie udało się pobrać danych:\n{error_msg}")
+    # =====================================================================
+
+    def filter_data(self):
+        active_filters = {}
+        for col_name, entry in self.filter_entries.items():
+            text = entry.text().strip().lower()
+            if text:
+                col_idx = self.columns.index(col_name)
+                active_filters[col_idx] = text
+        self.proxy_model.set_filters(active_filters)
+        self.update_count()
+
+    def update_count(self):
+        visible = self.proxy_model.rowCount()
+        self.lbl_count.setText(f"Licznik: {visible}")
+
+    def get_selected_record_data(self):
+        selected = self.table.selectionModel().selectedRows()
+        if not selected: return None
+
+        proxy_index = selected[0]
+        source_index = self.proxy_model.mapToSource(proxy_index)
+        row_data = self.source_model.get_row_data(source_index.row())
+        return {self.columns[i]: str(row_data[i]) if row_data[i] is not None else "" for i in range(len(self.columns))}

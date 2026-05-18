@@ -11,3 +11,6 @@ if __name__ == "__main__":
     window = Application()
     window.showMaximized()
     sys.exit(app.exec())
+
+
+#pyinstaller --noconsole --onefile --icon=msprzet.ico --add-data "msprzet.ico;." --name mSprzet main.py
