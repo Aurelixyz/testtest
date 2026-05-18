@@ -659,33 +659,33 @@ def get_record_history(table_name: str, record_id: int) -> tuple[list, list]:
 
 def get_global_history():
     """Pobiera skonsolidowaną historię ze wszystkich 9 tabel audytowych."""
-    query = """
+    query = f"""
         SELECT 'KONTA UŻYTKOWNIKÓW' AS KATEGORIA, [ID_UZYTKOWNIKA] AS ID_REKORDU, [TypZmiany] AS OPERACJA, CONVERT(varchar, [DataZmiany], 120) AS [DATA ZMIANY], [Uzytkownik] AS [AUTOR ZMIANY] 
-        FROM [LODZCD\JN12504].[mSPRZET_KONTA_UZYTKOWNIKOW_Historia]
+        FROM {S}.[mSPRZET_KONTA_UZYTKOWNIKOW_Historia]
         UNION ALL
         SELECT 'LAPTOPY', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
-        FROM [LODZCD\JN12504].[mSPRZET_LAPTOPY_Historia]
+        FROM {S}.[mSPRZET_LAPTOPY_Historia]
         UNION ALL
         SELECT 'MONITORY', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
-        FROM [LODZCD\JN12504].[mSPRZET_MONITORY_Historia]
+        FROM {S}.[mSPRZET_MONITORY_Historia]
         UNION ALL
         SELECT 'TELEFONY', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
-        FROM [LODZCD\JN12504].[mSPRZET_TELEFONY_Historia]
+        FROM {S}.[mSPRZET_TELEFONY_Historia]
         UNION ALL
         SELECT 'SŁUCHAWKI', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
-        FROM [LODZCD\JN12504].[mSPRZET_SLUCHAWKI_Historia]
+        FROM {S}.[mSPRZET_SLUCHAWKI_Historia]
         UNION ALL
         SELECT 'KARTY SIM', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
-        FROM [LODZCD\JN12504].[mSPRZET_KARTY_SIM_Historia]
+        FROM {S}.[mSPRZET_KARTY_SIM_Historia]
         UNION ALL
         SELECT 'ROUTER', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
-        FROM [LODZCD\JN12504].[mSPRZET_ROUTER_Historia]
+        FROM {S}.[mSPRZET_ROUTER_Historia]
         UNION ALL
         SELECT 'MYSZKI', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
-        FROM [LODZCD\JN12504].[mSPRZET_MYSZKI_Historia]
+        FROM {S}.[mSPRZET_MYSZKI_Historia]
         UNION ALL
         SELECT 'KLAWIATURY', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
-        FROM [LODZCD\JN12504].[mSPRZET_KLAWIATURY_Historia]
+        FROM {S}.[mSPRZET_KLAWIATURY_Historia]
         ORDER BY [DATA ZMIANY] DESC
     """
     conn = create_connection()

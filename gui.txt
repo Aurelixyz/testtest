@@ -74,7 +74,9 @@ class Application(QMainWindow):
                            ["NR KADROWY", "IMIE", "NAZWISKO", "STATUS", "NR SDJ", "UWAGI", "ID"]),
             "KONTA UŻYTKOWNIKÓW": ("mSPRZET_KONTA_UZYTKOWNIKOW", db.get_all_konta,
                                    ["NR KADROWY", "IMIE", "NAZWISKO", "RODZAJ ZATRUDNIENIA", "LOKALIZACJA",
-                                    "ID_UZYTKOWNIKA"])
+                                    "ID_UZYTKOWNIKA"]),
+            "HISTORIA GLOBALNA": (None, db.get_global_history,
+                                  ["KATEGORIA", "ID_REKORDU", "OPERACJA", "DATA ZMIANY", "AUTOR ZMIANY"])
         }
 
     def clear_all_selections(self):
@@ -117,7 +119,7 @@ class Application(QMainWindow):
         top_layout.setContentsMargins(0, 0, 0, 20)
 
         buttons_top = ["KONTA UŻYTKOWNIKÓW", "LAPTOPY", "MONITORY", "TELEFONY", "SŁUCHAWKI", "KARTY SIM", "ROUTER",
-                       "MYSZKI", "KLAWIATURY"]
+                       "MYSZKI", "KLAWIATURY", "HISTORIA GLOBALNA"]
 
         for btn_text in buttons_top:
             btn = QPushButton(btn_text)
@@ -240,7 +242,7 @@ class Application(QMainWindow):
         btn_refresh.clicked.connect(lambda: self.show_frame(section))
         self.right_layout.addWidget(btn_refresh)
 
-        if section != "UŻYTKOWNIK":
+        if section not in ("UŻYTKOWNIK", "HISTORIA GLOBALNA"):
             btn_add = QPushButton("DODAJ KONTO" if section == "KONTA UŻYTKOWNIKÓW" else "DODAJ SPRZĘT")
             btn_add.setMinimumHeight(30)
             btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -366,14 +368,15 @@ class Application(QMainWindow):
         return msg_box.clickedButton() == btn_yes
 
     def _get_actions_for_section(self, section):
-        if section == "KONTA UŻYTKOWNIKÓW":
+        if section == "HISTORIA GLOBALNA":
+            return []
+        elif section == "KONTA UŻYTKOWNIKÓW":
             return [
                 ("POKAŻ SPRZĘT UŻYTKOWNIKA", self.otworz_szczegoly_uzytkownika),
                 ("EDYTUJ KONTO", lambda: self.handle_edit(section)),
                 ("USUŃ KONTO", lambda: self.handle_delete(section))
             ]
         elif section == "UŻYTKOWNIK":
-            # --- ZMIANA: Rozbicie na dwa niezależne przyciski w menu bocznym ---
             return [
                 ("EDYTUJ ZAZNACZONY SPRZĘT", lambda: self.handle_edit("UŻYTKOWNIK")),
                 ("ODEPNIJ SPRZĘT", self.handle_unassign_from_user),
@@ -548,30 +551,25 @@ class Application(QMainWindow):
             db.delete_record_by_id(self.section_config[section][0], int(data[id_key]))
             sec_widget.load_data()
 
-    # --- NOWOŚĆ: Funkcja obsługująca czyszczenie przypisania bez usuwania rekordu ---
     def handle_unassign_from_user(self):
         for sec_key, table in self.user_equipment_view.asset_tables.items():
             selected = table.selectionModel().selectedRows()
             if selected:
                 row = selected[0].row()
-                # Pobieramy ID sprzętu, które znajduje się w ostatniej ukrytej kolumnie
                 record_id = int(table.item(row, table.columnCount() - 1).text())
 
                 if self.ask_yes_no('Potwierdzenie odpięcia',
                                    f'Czy na pewno chcesz ODPIĄĆ (wyczyścić przypisanie) ten sprzęt od użytkownika?\n(Sprzęt wróci do puli wolnych urządzeń)'):
                     try:
-                        # Aktualizujemy TYLKO fizycznie istniejącą kolumnę ID_UZYTKOWNIKA
                         db.update_record(self.section_config[sec_key][0], record_id, {
                             "ID_UZYTKOWNIKA": None
                         })
-                        # Odświeżamy widok sprzętów użytkownika
                         self.user_equipment_view.load_user_assets(self.user_values["ID_UZYTKOWNIKA"].text())
                     except Exception as e:
                         QMessageBox.critical(self, "Błąd bazy danych", f"Nie udało się odpiąć sprzętu:\n{e}")
                 return
         QMessageBox.warning(self, "Brak wyboru", "Zaznacz sprzęt do odpięcia.")
 
-    # --- POPRAWKA: Funkcja usuwania sprzętu w oknie użytkownika sprząta wyłącznie bazę ---
     def handle_delete_from_user(self):
         for sec_key, table in self.user_equipment_view.asset_tables.items():
             selected = table.selectionModel().selectedRows()
@@ -595,7 +593,6 @@ class Application(QMainWindow):
         user_data = {k: v.text() for k, v in self.user_values.items()}
         table_name, fetch_m, cols = self.section_config[section]
 
-        # --- ZMIANA: Przekazujemy 'section' (tekstowo) jako drugi parametr dla okna dialogowego ---
         dlg = AssignmentDialog(self, section, user_data, table_name, fetch_m, cols,
                                lambda: self.user_equipment_view.load_user_assets(user_id))
         dlg.exec()
