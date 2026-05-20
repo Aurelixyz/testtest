@@ -1,4 +1,3 @@
-
 """
 services/email_service.py
 
@@ -43,13 +42,13 @@ def get_user_equipment(user_id: str) -> tuple:
     column_descriptions = {}
 
     queries = {
-        "LAPTOPY":    f"SELECT * FROM {_SCHEMA}.[mSPRZET_LAPTOPY]     WHERE [ID_UZYTKOWNIKA] = ?",
-        "MONITORY":   f"SELECT * FROM {_SCHEMA}.[mSPRZET_MONITORY]    WHERE [ID_UZYTKOWNIKA] = ?",
-        "TELEFONY":   f"SELECT * FROM {_SCHEMA}.[mSPRZET_TELEFONY]    WHERE [ID_UZYTKOWNIKA] = ?",
-        "SLUCHAWKI":  f"SELECT * FROM {_SCHEMA}.[mSPRZET_SLUCHAWKI]   WHERE [ID_UZYTKOWNIKA] = ?",
-        "KARTY SIM":  f"SELECT * FROM {_SCHEMA}.[mSPRZET_KARTY_SIM]   WHERE [ID_UZYTKOWNIKA] = ?",
+        "LAPTOPY":    f"SELECT * FROM {_SCHEMA}.[mSPRZET_LAPTOPY]      WHERE [ID_UZYTKOWNIKA] = ?",
+        "MONITORY":   f"SELECT * FROM {_SCHEMA}.[mSPRZET_MONITORY]     WHERE [ID_UZYTKOWNIKA] = ?",
+        "TELEFONY":   f"SELECT * FROM {_SCHEMA}.[mSPRZET_TELEFONY]     WHERE [ID_UZYTKOWNIKA] = ?",
+        "SLUCHAWKI":  f"SELECT * FROM {_SCHEMA}.[mSPRZET_SLUCHAWKI]    WHERE [ID_UZYTKOWNIKA] = ?",
+        "KARTY SIM":  f"SELECT * FROM {_SCHEMA}.[mSPRZET_KARTY_SIM]    WHERE [ID_UZYTKOWNIKA] = ?",
         "ROUTER":     f"SELECT * FROM {_SCHEMA}.[mSPRZET_ROUTER]       WHERE [ID_UZYTKOWNIKA] = ?",
-        "MYSZKI":     f"SELECT COUNT(*) as LICZBA FROM {_SCHEMA}.[mSPRZET_MYSZKI]    WHERE [ID_UZYTKOWNIKA] = ?",
+        "MYSZKI":     f"SELECT COUNT(*) as LICZBA FROM {_SCHEMA}.[mSPRZET_MYSZKI]     WHERE [ID_UZYTKOWNIKA] = ?",
         "KLAWIATURY": f"SELECT COUNT(*) as LICZBA FROM {_SCHEMA}.[mSPRZET_KLAWIATURY] WHERE [ID_UZYTKOWNIKA] = ?",
     }
 
@@ -102,8 +101,9 @@ _BIT_COLS_TELEFONY = {
 
 
 def _bit_display(val) -> str:
+    # --- ZMIANA 'tak' NA 'x' ---
     if val == 1:
-        return "tak"
+        return "x"
     if val == 0:
         return ""
     return str(val) if val is not None else ""
@@ -177,9 +177,6 @@ def build_email_body(user_data: dict, user_equipment: dict, column_descriptions:
     return body
 
 
-
-
-
 # ─── Wysylanie / wyswietlanie maila przez Outlook ──────────────────────────
 
 def _bring_window_to_front(subject: str) -> None:
@@ -206,7 +203,8 @@ def send_email(email_body: str, user_data: dict, przelozony: str) -> None:
     imie = user_data.get("IMIE", "N/A")
     nazwisko = user_data.get("NAZWISKO", "N/A")
     nr_kadrowy = user_data.get("NR KADROWY", "N/A")
-    subject = f"Informacje o sprzecie: {imie} {nazwisko} {nr_kadrowy}"
+    # --- ZMIANA: POLSKI ZNAK W TEMACIE ---
+    subject = f"Informacje o sprzęcie: {imie} {nazwisko} {nr_kadrowy}"
 
     # Jesli okno z takim tematem juz istnieje — aktywuj je
     existing = gw.getWindowsWithTitle(subject)
@@ -226,5 +224,3 @@ def send_email(email_body: str, user_data: dict, przelozony: str) -> None:
     # Krótkie opoznienie — czas na pojawienie sie okna
     time.sleep(0.4)
     _bring_window_to_front(subject)
-
-

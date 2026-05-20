@@ -5,6 +5,54 @@ from PyQt6.QtCore import Qt
 import sprzet_queries as db
 
 
+class ScannerLineEdit(QLineEdit):
+    """
+    Specjalne pole tekstowe przystosowane do współpracy z fizycznym skanerem kodów kreskowych.
+    Reaguje na klawisz Enter/Return (wysyłany automatycznie przez skaner na końcu ciągu).
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.is_locked_by_scanner = False
+        self.default_style = ""
+
+    def keyPressEvent(self, event):
+        # Jeśli pole jest zablokowane domyślnie (np. pola "Imię" i "Nazwisko"), nie ingeruj.
+        if self.isReadOnly() and not self.is_locked_by_scanner:
+            super().keyPressEvent(event)
+            return
+
+        # Jeśli pole zostało poprawnie zeskanowane i zablokowane
+        if self.is_locked_by_scanner:
+            # Wciśnięcie Backspace lub Delete resetuje pole i zdejmuje blokadę
+            if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+                self.clear()
+                self.is_locked_by_scanner = False
+                self.setReadOnly(False)
+                self.setStyleSheet(self.default_style)
+            else:
+                # Ignoruj wszelkie inne próby wpisania tekstu
+                event.ignore()
+            return
+
+        # Pozwól na normalne wpisywanie tekstu z klawiatury
+        super().keyPressEvent(event)
+
+        # Jeśli wciśnięto Enter (skaner skończył wpisywać i wysłał sygnał końca)
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if self.text().strip():
+                # Zapisz domyślny styl, aby móc do niego wrócić
+                self.default_style = self.styleSheet()
+
+                # Zablokuj pole i ustaw zielone tło jako potwierdzenie
+                self.is_locked_by_scanner = True
+                self.setReadOnly(True)
+                self.setStyleSheet("background-color: #d4edda; color: black; border: 1px solid #28a745;")
+
+                # Automatycznie przeskocz do następnego elementu w oknie
+                self.focusNextChild()
+
+
 class RecordDialog(QDialog):
     def __init__(self, parent, title: str, fields_config: list[dict], table_name: str,
                  unique_columns: list[str], on_save_callback, record_id: int = None, initial_data: dict = None):
@@ -68,7 +116,8 @@ class RecordDialog(QDialog):
                 self.entries[db_col] = widget
 
             else:
-                widget = QLineEdit()
+                # Używamy naszej inteligentnej klasy obsługującej skaner!
+                widget = ScannerLineEdit()
                 if init_val:
                     widget.setText(str(init_val))
 
@@ -78,6 +127,7 @@ class RecordDialog(QDialog):
 
                 self.entries[db_col] = widget
 
+                # Obsługa szukania pracownika po wpisaniu Nr Kadrowego
                 if db_col == "NR KADROWY" and self.table_name != "mSPRZET_KONTA_UZYTKOWNIKOW":
                     widget.editingFinished.connect(self._validate_user)
 
@@ -90,7 +140,7 @@ class RecordDialog(QDialog):
                     search_btn = QPushButton("🔍")
                     search_btn.setToolTip("Wyszukaj użytkownika z listy")
                     search_btn.setFixedWidth(35)
-                    search_btn.setCursor(Qt.CursorShape.PointingHandCursor)  # <- Kursor
+                    search_btn.setCursor(Qt.CursorShape.PointingHandCursor)
                     search_btn.clicked.connect(self._open_search_user)
                     h_layout.addWidget(search_btn)
 
@@ -104,7 +154,7 @@ class RecordDialog(QDialog):
         btn_text = "Zapisz" if self.record_id else "Dodaj"
         save_btn = QPushButton(btn_text)
         save_btn.setStyleSheet("background-color: lightgreen; font-weight: bold; padding: 8px;")
-        save_btn.setCursor(Qt.CursorShape.PointingHandCursor)  # <- Kursor
+        save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         save_btn.clicked.connect(self._save_record)
         layout.addWidget(save_btn)
 
@@ -144,7 +194,7 @@ class RecordDialog(QDialog):
                 new_values[db_col] = 1 if widget.isChecked() else 0
             elif isinstance(widget, QComboBox):
                 new_values[db_col] = widget.currentText()
-            elif isinstance(widget, QLineEdit):
+            elif isinstance(widget, ScannerLineEdit):
                 new_values[db_col] = widget.text().strip()
 
         if self.table_name != "mSPRZET_KONTA_UZYTKOWNIKOW" and "NR KADROWY" in self.entries:

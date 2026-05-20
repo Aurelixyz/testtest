@@ -657,6 +657,7 @@ def get_record_history(table_name: str, record_id: int) -> tuple[list, list]:
     finally:
         conn.close()
 
+
 def get_global_history():
     """Pobiera skonsolidowaną historię ze wszystkich 9 tabel audytowych."""
     query = f"""
@@ -692,7 +693,21 @@ def get_global_history():
     try:
         cursor = conn.cursor()
         cursor.execute(query)
-        return [list(row) for row in cursor.fetchall()]
+
+        # --- ZMIANA: Tłumaczenie operacji dla Historii Globalnej ---
+        rows = []
+        for row in cursor.fetchall():
+            row_list = list(row)
+            op = str(row_list[2]).upper()
+            if op == "INSERT":
+                row_list[2] = "Dodanie"
+            elif op == "UPDATE":
+                row_list[2] = "Edycja"
+            elif op == "DELETE":
+                row_list[2] = "Usunięcie"
+            rows.append(row_list)
+
+        return rows
     except Exception as e:
         print(f"Błąd globalnej historii: {e}")
         return []

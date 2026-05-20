@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QTableWidget,
 from PyQt6.QtCore import Qt
 from gui_shared import DISPLAY_NAMES, InteractiveTableWidget
 
+
 class HistoryDialog(QDialog):
     def __init__(self, parent, title: str, history_data: list, db_columns: list):
         super().__init__(parent)
@@ -12,20 +13,26 @@ class HistoryDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        # Usunięto QLabel z tytułem
-
         headers = []
-        for col in db_columns:
+        op_idx = -1
+        for i, col in enumerate(db_columns):
             if col == "ID_Historia":
                 headers.append("ID LOGU")
             elif col == "TypZmiany":
                 headers.append("OPERACJA")
+                op_idx = i
             elif col == "DataZmiany":
                 headers.append("DATA ZMIANY")
             elif col == "Uzytkownik":
                 headers.append("AUTOR ZMIANY")
             else:
                 headers.append(DISPLAY_NAMES.get(col, col).replace("\n", " "))
+
+        # Wyszukajmy op_idx dla logów globalnych z innej nazwy kolumn
+        if op_idx == -1:
+            for i, h in enumerate(headers):
+                if h == "OPERACJA":
+                    op_idx = i
 
         self.table = InteractiveTableWidget()
         self.table.setColumnCount(len(headers))
@@ -47,6 +54,17 @@ class HistoryDialog(QDialog):
         for row_idx, row_data in enumerate(history_data):
             for col_idx, val in enumerate(row_data):
                 cell_text = str(val) if val is not None else ""
+
+                # --- ZMIANA: TŁUMACZENIE OPERACJI ---
+                if col_idx == op_idx:
+                    op_upper = cell_text.upper()
+                    if op_upper == "INSERT":
+                        cell_text = "Dodanie"
+                    elif op_upper == "UPDATE":
+                        cell_text = "Edycja"
+                    elif op_upper == "DELETE":
+                        cell_text = "Usunięcie"
+
                 item = QTableWidgetItem(cell_text)
                 item.setToolTip(cell_text)
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)

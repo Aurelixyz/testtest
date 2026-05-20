@@ -114,13 +114,8 @@ class AssignmentDialog(QDialog):
         assign_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         assign_btn.clicked.connect(self._assign_selected)
 
-        add_btn = QPushButton("Dodaj nowy do bazy (i przypisz)")
-        add_btn.setStyleSheet("background-color: #87CEFA;")
-        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        add_btn.clicked.connect(self._add_new)
-
         btn_layout.addWidget(assign_btn)
-        btn_layout.addWidget(add_btn)
+        btn_layout.addStretch() # Wypycha przycisk na lewo
         layout.addLayout(btn_layout)
 
         self.table.horizontalHeader().sectionResized.connect(self._sync_filter_widths)
@@ -188,33 +183,3 @@ class AssignmentDialog(QDialog):
             self.accept()
         except Exception as e:
             QMessageBox.critical(self, "Błąd", f"Nie udało się przypisać sprzętu: {e}")
-
-    def _add_new(self):
-        # --- ZMIANA: Przekazujemy wszystkie dane pracownika (Nr kadrowy, Imię i Nazwisko) do formularza ---
-        initial_data = {
-            "NR KADROWY": self.user_data.get("NR KADROWY", ""),
-            "IMIE": self.user_data.get("IMIE", ""),
-            "NAZWISKO": self.user_data.get("NAZWISKO", "")
-        }
-
-        if hasattr(self.parent(), '_get_fields_config'):
-            fields_config = self.parent()._get_fields_config(self.section)
-
-            def on_record_saved():
-                self._load_data()
-                self.on_assign_callback()
-
-            from record_dialog import RecordDialog
-            dlg = RecordDialog(
-                self,
-                f"Dodaj i Przypisz - {self.section}",
-                fields_config,
-                self.table_name,
-                [],
-                on_record_saved,
-                None,
-                initial_data
-            )
-            dlg.exec()
-        else:
-            QMessageBox.critical(self, "Błąd", "Nie udało się wygenerować kreatora dodawania.")

@@ -255,6 +255,14 @@ class Application(QMainWindow):
             btn_import.clicked.connect(lambda: self.import_from_excel(section))
             self.right_layout.addWidget(btn_import)
 
+        if section != "UŻYTKOWNIK":
+            btn_export = QPushButton("EKSPORT DO EXCELA")
+            btn_export.setMinimumHeight(30)
+            btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_export.setStyleSheet("background-color: #d1ecf1; font-weight: bold;")
+            btn_export.clicked.connect(lambda checked, s=section: self.export_to_excel(s))
+            self.right_layout.addWidget(btn_export)
+
         actions = self._get_actions_for_section(section)
         req_selection = ["EDYTUJ", "USUŃ", "POKAŻ SPRZĘT", "ODEPNIJ"]
         context_actions = [a for a in actions if any(req in a[0].upper() for req in req_selection)]
@@ -593,8 +601,39 @@ class Application(QMainWindow):
         user_data = {k: v.text() for k, v in self.user_values.items()}
         table_name, fetch_m, cols = self.section_config[section]
 
-        dlg = AssignmentDialog(self, section, user_data, table_name, fetch_m, cols,
-                               lambda: self.user_equipment_view.load_user_assets(user_id))
+        # 1. Funkcja odpalająca stary modal (tabelę) z wolnym sprzętem
+        def open_assignment_dialog():
+            dlg = AssignmentDialog(self, section, user_data, table_name, fetch_m, cols,
+                                   lambda: self.user_equipment_view.load_user_assets(user_id))
+            dlg.exec()
+
+        # 2. Inicjalizacja RecordDialog z dodawaniem sprzętu i przypisanym już użytkownikiem (formularz)
+        fields_config = self._get_fields_config(section)
+        initial_data = {
+            "NR KADROWY": user_data.get("NR KADROWY", ""),
+            "IMIE": user_data.get("IMIE", ""),
+            "NAZWISKO": user_data.get("NAZWISKO", "")
+        }
+
+        dlg = RecordDialog(self, f"Dodaj i Przypisz - {section}", fields_config, table_name, [],
+                           lambda: self.user_equipment_view.load_user_assets(user_id),
+                           None, initial_data)
+
+        # --- ZMIANA NAZWY PRZYCISKU NA 'Wyszukaj' ---
+        btn_search = QPushButton("Wyszukaj")
+        btn_search.setStyleSheet("background-color: #ffdcb8; font-weight: bold; padding: 8px; margin-top: 10px;")
+        btn_search.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        def switch_to_search():
+            dlg.reject()  # zamykamy okno dodawania
+            open_assignment_dialog()  # odpalamy okno magazynu (AssignmentDialog)
+
+        btn_search.clicked.connect(switch_to_search)
+
+        # Dodajemy przycisk do głównego layoutu na sam dół
+        dlg.layout().addWidget(btn_search)
+        dlg.setFixedSize(480, 600)  # Zwiększamy nieco okno by zmieścił się dodatkowy przycisk
+
         dlg.exec()
 
     def show_context_menu(self, position, table):
@@ -790,6 +829,51 @@ class Application(QMainWindow):
                 QMessageBox.critical(self, "Błąd", str(e))
             finally:
                 QApplication.restoreOverrideCursor()
+
+    def export_to_excel(self, section):
+        """Pobiera widoczne wiersze (po filtrach) z tabeli i eksportuje je do pliku .xlsx"""
+        sec_widget = self.sections_widgets.get(section)
+        if not sec_widget:
+            return
+
+        # Pobieramy ProxyModel (dzięki temu mamy tylko przefiltrowane dane)
+        model = sec_widget.proxy_model
+        rows = model.rowCount()
+        cols = model.columnCount()
+
+        if rows == 0:
+            QMessageBox.information(self, "Brak danych", "Tabela jest pusta, nie ma czego eksportować.")
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Zapisz jako Excel",
+            f"Eksport_{section}.xlsx".replace(" ", "_"),
+            "Pliki Excel (*.xlsx *.xls)"
+        )
+
+        if not file_path:
+            return
+
+        # Zczytywanie nagłówków
+        headers = [model.headerData(i, Qt.Orientation.Horizontal, Qt.ItemDataRole.DisplayRole) for i in range(cols)]
+        data = []
+
+        # Zczytywanie danych z zachowaniem sortowania i filtrowania
+        for r in range(rows):
+            row_data = []
+            for c in range(cols):
+                idx = model.index(r, c)
+                val = model.data(idx, Qt.ItemDataRole.DisplayRole)
+                row_data.append(val)
+            data.append(row_data)
+
+        try:
+            df = pd.DataFrame(data, columns=headers)
+            df.to_excel(file_path, index=False)
+            QMessageBox.information(self, "Sukces", f"Eksport zakończony pomyślnie:\n{file_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Błąd", f"Wystąpił błąd podczas zapisu pliku:\n{e}")
 
     def closeEvent(self, event):
         for sec_widget in self.sections_widgets.values():

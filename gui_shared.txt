@@ -8,6 +8,14 @@ from PyQt6.QtWidgets import QTableView
 from PyQt6.QtGui import QFont
 import sprzet_queries as db
 
+class NumericTableWidgetItem(QTableWidgetItem):
+    """Klasa dziedzicząca po QTableWidgetItem, umożliwiająca numeryczne sortowanie."""
+    def __lt__(self, other):
+        try:
+            return float(self.text()) < float(other.text())
+        except (ValueError, TypeError):
+            return self.text() < other.text()
+
 DISPLAY_NAMES = {
     "NR KADROWY": "NUMER\nKADROWY",
     "IMIE": "IMIĘ",
@@ -359,7 +367,7 @@ class SearchUserDialog(QDialog):
             for r_idx, row in enumerate(rows):
                 for c_idx, val in enumerate(row):
                     text_val = str(val) if val else ""
-                    item = QTableWidgetItem(text_val)
+                    item = NumericTableWidgetItem(text_val)  # <-- ZMIANA UMOŻLIWIAJĄCA SORTOWANIE
                     item.setToolTip(text_val)  # --- Dodano ToolTip ---
                     self.table.setItem(r_idx, c_idx, item)
             self.table.setSortingEnabled(True)
@@ -423,12 +431,27 @@ class MultiFilterProxyModel(QSortFilterProxyModel):
     def filterAcceptsRow(self, source_row, source_parent):
         if not self.filters:
             return True
+
         for col_idx, f_val in self.filters.items():
             idx = self.sourceModel().index(source_row, col_idx, source_parent)
             data = self.sourceModel().data(idx, Qt.ItemDataRole.DisplayRole)
-            if data and f_val not in str(data).lower():
+
+            # Zabezpieczamy się: jeśli data to None, zamieniamy na pusty string
+            text_data = str(data).lower() if data is not None else ""
+
+            # Ukrywamy wiersz, jeśli szukana fraza NIE znajduje się w tekście komórki
+            if f_val not in text_data:
                 return False
+
         return True
+
+    def lessThan(self, left_index, right_index):
+        left_data = self.sourceModel().data(left_index, Qt.ItemDataRole.DisplayRole)
+        right_data = self.sourceModel().data(right_index, Qt.ItemDataRole.DisplayRole)
+        try:
+            return float(left_data) < float(right_data)
+        except (ValueError, TypeError):
+            return str(left_data) < str(right_data)
 
 class FlowLayout(QLayout):
     def __init__(self, parent=None, margin=0, spacing=-1):

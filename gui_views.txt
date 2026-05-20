@@ -5,7 +5,8 @@ from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt6.QtWidgets import QTableView
 
 from gui_shared import (DISPLAY_NAMES, BackgroundWidget, InteractiveTableWidget,
-                        InteractiveTableView, DataTableModel, MultiFilterProxyModel)
+                        InteractiveTableView, DataTableModel, MultiFilterProxyModel,
+                        NumericTableWidgetItem)
 import sprzet_queries as db
 
 
@@ -81,7 +82,7 @@ class UserEquipmentWidget(QScrollArea):
         for r_idx, row in enumerate(rows):
             for c_idx, val in enumerate(row):
                 text_val = str(val) if val is not None else ""
-                item = QTableWidgetItem(text_val)
+                item = NumericTableWidgetItem(text_val)
                 # --- WŁĄCZONE PODPOWIEDZI DLA KOMÓREK ---
                 item.setToolTip(text_val)
                 table.setItem(r_idx, c_idx, item)
