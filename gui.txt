@@ -3,7 +3,7 @@ import os
 import pandas as pd
 from PyQt6.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton,
                              QLabel, QStackedWidget, QScrollArea, QMessageBox, QFrame,
-                             QApplication, QMenu, QFileDialog, QDialog, QTableWidget, QHeaderView)
+                             QApplication, QMenu, QFileDialog, QDialog, QTableWidget, QHeaderView, QTextEdit)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
 
@@ -103,7 +103,7 @@ class Application(QMainWindow):
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)
 
-        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setContentsMargins(5, 0, 0, 0)
         main_layout.setSpacing(5)
 
         left_widget = BackgroundWidget(self)
@@ -114,6 +114,7 @@ class Application(QMainWindow):
         main_layout.addWidget(left_widget, stretch=4)
 
         self.top_frame = BackgroundWidget(self)
+        self.top_frame.setObjectName("topTabsFrame")
 
         top_layout = FlowLayout(self.top_frame, spacing=5)
         top_layout.setContentsMargins(0, 0, 0, 20)
@@ -124,8 +125,7 @@ class Application(QMainWindow):
         for btn_text in buttons_top:
             btn = QPushButton(btn_text)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setMinimumWidth(130)
-            btn.setMinimumHeight(35)
+            btn.setMinimumHeight(24)
             self.tab_buttons[btn_text] = btn
             btn.clicked.connect(lambda checked, text=btn_text: self.show_frame(text))
             top_layout.addWidget(btn)
@@ -135,8 +135,7 @@ class Application(QMainWindow):
         sp = self.btn_uzytkownik_tab.sizePolicy()
         sp.setRetainSizeWhenHidden(True)
         self.btn_uzytkownik_tab.setSizePolicy(sp)
-        self.btn_uzytkownik_tab.setMinimumWidth(180)
-        self.btn_uzytkownik_tab.setMinimumHeight(35)
+        self.btn_uzytkownik_tab.setMinimumHeight(24)
         self.btn_uzytkownik_tab.clicked.connect(lambda: self.show_frame("UŻYTKOWNIK"))
         self.btn_uzytkownik_tab.hide()
         top_layout.addWidget(self.btn_uzytkownik_tab)
@@ -145,19 +144,22 @@ class Application(QMainWindow):
 
         self.user_info_frame = BackgroundWidget(self)
         user_info_layout = QHBoxLayout(self.user_info_frame)
-        user_info_layout.setContentsMargins(0, 0, 0, 0)
+        user_info_layout.setContentsMargins(10, 5, 0, 15)  # Margines z lewej i od dołu
+        user_info_layout.setSpacing(15)  # Odstęp między samymi wartościami
+        user_info_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)  # Równanie do lewej
+
         for db_col in ["NR KADROWY", "IMIE", "NAZWISKO", "RODZAJ ZATRUDNIENIA", "LOKALIZACJA", "ID_UZYTKOWNIKA"]:
-            box = QVBoxLayout()
-            box.setContentsMargins(0, 0, 0, 0)
-            label_title = QLabel(DISPLAY_NAMES.get(db_col, db_col))
-            label_title.setStyleSheet("background: transparent; border: none; font-weight: bold;")
-            box.addWidget(label_title)
             val_lbl = QLabel("-")
             val_lbl.setStyleSheet(
-                "color: red; font-weight: bold; font-size: 11pt; background: transparent; border: none;")
+                "color: midnightblue; font-weight: bold; font-size: 12pt; background: transparent; border: none;")
             self.user_values[db_col] = val_lbl
-            box.addWidget(val_lbl)
-            user_info_layout.addLayout(box)
+
+            # Ukrywamy techniczne ID użytkownika w interfejsie
+            if db_col == "ID_UZYTKOWNIKA":
+                val_lbl.hide()
+
+            user_info_layout.addWidget(val_lbl)
+
         self.user_info_frame.hide()
         left_layout.addWidget(self.user_info_frame)
 
@@ -172,18 +174,29 @@ class Application(QMainWindow):
         self.user_equipment_view = UserEquipmentWidget(self)
         self.stacked_widget.addWidget(self.user_equipment_view)
 
+        self.right_panel_container = BackgroundWidget(self)
+        self.right_panel_container.setObjectName("rightPanelContainer")
+        self.right_panel_container.setFixedWidth(180)
+
+        right_panel_outer_layout = QVBoxLayout(self.right_panel_container)
+        right_panel_outer_layout.setContentsMargins(0, 0, 0, 0)
+        right_panel_outer_layout.setSpacing(0)
+
         self.right_frame = QScrollArea()
+        self.right_frame.setObjectName("rightPanelScroll")
         self.right_frame.setWidgetResizable(True)
-        self.right_frame.setFixedWidth(220)
         self.right_frame.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.right_frame.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         self.right_content = BackgroundWidget(self)
+        self.right_content.setObjectName("rightPanel")
         self.right_layout = QVBoxLayout(self.right_content)
         self.right_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.right_layout.setContentsMargins(5, 0, 0, 0)
+        self.right_layout.setContentsMargins(5, 20, 0, 0)
+
         self.right_frame.setWidget(self.right_content)
-        main_layout.addWidget(self.right_frame, stretch=1)
+        right_panel_outer_layout.addWidget(self.right_frame)
+        main_layout.addWidget(self.right_panel_container)
 
     def show_frame(self, section):
         for sec_widget in self.sections_widgets.values():
@@ -229,64 +242,63 @@ class Application(QMainWindow):
             if widget is not None:
                 widget.deleteLater()
 
-        has_selection = False
-        if section == "UŻYTKOWNIK":
-            has_selection = any(
-                bool(t.selectionModel().selectedRows()) for t in self.user_equipment_view.asset_tables.values())
-        elif section in self.sections_widgets:
-            has_selection = bool(self.sections_widgets[section].table.selectionModel().selectedRows())
+        if section == "KONTA UŻYTKOWNIKÓW":
+            btn_show_equipment = QPushButton("POKAŻ SPRZĘT UŻYTKOWNIKA")
+            btn_show_equipment.setMinimumHeight(24)
+            btn_show_equipment.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_show_equipment.clicked.connect(self.otworz_szczegoly_uzytkownika)
+            self.right_layout.addWidget(btn_show_equipment)
 
-        btn_refresh = QPushButton("ODŚWIEŻ DANE")
-        btn_refresh.setMinimumHeight(30)
-        btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_refresh.clicked.connect(lambda: self.show_frame(section))
-        self.right_layout.addWidget(btn_refresh)
-
-        if section not in ("UŻYTKOWNIK", "HISTORIA GLOBALNA"):
-            btn_add = QPushButton("DODAJ KONTO" if section == "KONTA UŻYTKOWNIKÓW" else "DODAJ SPRZĘT")
-            btn_add.setMinimumHeight(30)
+        # Ukryte Dodaj/Edytuj/Usuń dla Historii oraz Szczegółów Użytkownika
+        if section not in ("HISTORIA GLOBALNA", "UŻYTKOWNIK"):
+            btn_add = QPushButton("DODAJ")
+            btn_add.setMinimumHeight(24)
             btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_add.clicked.connect(lambda: self.handle_add(section))
             self.right_layout.addWidget(btn_add)
 
+            btn_edit = QPushButton("EDYTUJ")
+            btn_edit.setMinimumHeight(24)
+            btn_edit.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_edit.clicked.connect(lambda: self.handle_edit(section))
+            self.right_layout.addWidget(btn_edit)
+
+            btn_delete = QPushButton("USUŃ")
+            btn_delete.setMinimumHeight(24)
+            btn_delete.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_delete.clicked.connect(lambda: self.handle_delete(section))
+            self.right_layout.addWidget(btn_delete)
+
+        btn_refresh = QPushButton("ODŚWIEŻ DANE")
+        btn_refresh.setMinimumHeight(24)
+        btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_refresh.clicked.connect(lambda: self.show_frame(section))
+        self.right_layout.addWidget(btn_refresh)
+
+        line_main = QFrame()
+        line_main.setFrameShape(QFrame.Shape.HLine)
+        line_main.setStyleSheet("background-color: #c0c0c0; margin: 10px 0;")
+        self.right_layout.addWidget(line_main)
+
+        if section != "UŻYTKOWNIK" and section != "HISTORIA GLOBALNA":
             btn_import = QPushButton("IMPORT Z EXCELA")
-            btn_import.setMinimumHeight(30)
+            btn_import.setMinimumHeight(24)
             btn_import.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_import.clicked.connect(lambda: self.import_from_excel(section))
             self.right_layout.addWidget(btn_import)
 
-        if section != "UŻYTKOWNIK":
             btn_export = QPushButton("EKSPORT DO EXCELA")
-            btn_export.setMinimumHeight(30)
+            btn_export.setMinimumHeight(24)
             btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn_export.setStyleSheet("background-color: #d1ecf1; font-weight: bold;")
             btn_export.clicked.connect(lambda checked, s=section: self.export_to_excel(s))
             self.right_layout.addWidget(btn_export)
 
-        actions = self._get_actions_for_section(section)
-        req_selection = ["EDYTUJ", "USUŃ", "POKAŻ SPRZĘT", "ODEPNIJ"]
-        context_actions = [a for a in actions if any(req in a[0].upper() for req in req_selection)]
-
-        if has_selection and context_actions:
-            line = QFrame()
-            line.setFrameShape(QFrame.Shape.HLine)
-            line.setStyleSheet("background-color: #c0c0c0; margin: 10px 0;")
-            self.right_layout.addWidget(line)
-
+        if section != "HISTORIA GLOBALNA":
             btn_history = QPushButton("HISTORIA ZMIAN")
-            btn_history.setMinimumHeight(30)
+            btn_history.setMinimumHeight(24)
             btn_history.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn_history.setStyleSheet("background-color: #d1ecf1; color: #0c5460; font-weight: bold;")
             btn_history.clicked.connect(self.handle_show_history)
             self.right_layout.addWidget(btn_history)
-
-            for btn_text, callback in context_actions:
-                btn = QPushButton(btn_text)
-                btn.setMinimumHeight(30)
-                btn.setCursor(Qt.CursorShape.PointingHandCursor)
-                btn.setStyleSheet("background-color: #ffdcb8; font-weight: bold;")
-                btn.clicked.connect(callback)
-                self.right_layout.addWidget(btn)
 
         if section == "UŻYTKOWNIK":
             line_assign = QFrame()
@@ -294,10 +306,12 @@ class Application(QMainWindow):
             line_assign.setStyleSheet("background-color: #c0c0c0; margin: 10px 0;")
             self.right_layout.addWidget(line_assign)
 
-            assign_actions = [a for a in actions if "PRZYPISZ" in a[0].upper()]
+            # TUTAJ USUNIĘTO PRZYCISK "ODPIJ SPRZĘT" - od razu przechodzimy do "PRZYPISZ..."
+
+            assign_actions = [a for a in self._get_actions_for_section(section) if "PRZYPISZ" in a[0].upper()]
             for btn_text, callback in assign_actions:
                 btn = QPushButton(btn_text)
-                btn.setMinimumHeight(30)
+                btn.setMinimumHeight(24)
                 btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn.clicked.connect(callback)
                 self.right_layout.addWidget(btn)
@@ -307,20 +321,26 @@ class Application(QMainWindow):
             line_docs.setStyleSheet("background-color: #c0c0c0; margin: 10px 0;")
             self.right_layout.addWidget(line_docs)
 
+            # Styl dla niebieskich przycisków 3D (zgodnie z Twoim zrzutem ekranu)
+            blue_3d_style = """
+                            QPushButton { background-color: #8ad3ff; border: 2px outset #5b9dbf; }
+                            QPushButton:pressed { border: 2px inset #5b9dbf; padding-top: 5px; padding-left: 9px; padding-bottom: 3px; padding-right: 7px; }
+                        """
+
             btn1 = QPushButton("PROTOKÓŁ ODBIORU")
-            btn1.setStyleSheet("background-color: #87CEFA; font-weight: bold;")
+            btn1.setStyleSheet(blue_3d_style)
             btn1.setCursor(Qt.CursorShape.PointingHandCursor)
             btn1.clicked.connect(self.generuj_protokol_odbioru)
             self.right_layout.addWidget(btn1)
 
             btn2 = QPushButton("OŚWIADCZENIE LAPTOP")
-            btn2.setStyleSheet("background-color: #87CEFA; font-weight: bold;")
+            btn2.setStyleSheet(blue_3d_style)
             btn2.setCursor(Qt.CursorShape.PointingHandCursor)
             btn2.clicked.connect(self.generuj_oswiadczenie_laptop)
             self.right_layout.addWidget(btn2)
 
             btn3 = QPushButton("WYŚLIJ MAIL")
-            btn3.setStyleSheet("background-color: lightgreen; font-weight: bold; margin-bottom: 15px;")
+            btn3.setStyleSheet(blue_3d_style + "margin-bottom: 15px;")
             btn3.setCursor(Qt.CursorShape.PointingHandCursor)
             btn3.clicked.connect(self.generate_user_email)
             self.right_layout.addWidget(btn3)
@@ -381,14 +401,13 @@ class Application(QMainWindow):
         elif section == "KONTA UŻYTKOWNIKÓW":
             return [
                 ("POKAŻ SPRZĘT UŻYTKOWNIKA", self.otworz_szczegoly_uzytkownika),
-                ("EDYTUJ KONTO", lambda: self.handle_edit(section)),
-                ("USUŃ KONTO", lambda: self.handle_delete(section))
+                ("EDYTUJ", lambda: self.handle_edit(section)),
+                ("USUŃ", lambda: self.handle_delete(section))
             ]
         elif section == "UŻYTKOWNIK":
             return [
-                ("EDYTUJ ZAZNACZONY SPRZĘT", lambda: self.handle_edit("UŻYTKOWNIK")),
-                ("ODEPNIJ SPRZĘT", self.handle_unassign_from_user),
-                ("USUŃ SPRZĘT", self.handle_delete_from_user),
+                ("EDYTUJ", lambda: self.handle_edit("UŻYTKOWNIK")),
+                ("USUŃ", self.handle_delete_from_user),
                 ("PRZYPISZ LAPTOP", lambda: self.handle_assign("LAPTOPY")),
                 ("PRZYPISZ MONITOR", lambda: self.handle_assign("MONITORY")),
                 ("PRZYPISZ TELEFON", lambda: self.handle_assign("TELEFONY")),

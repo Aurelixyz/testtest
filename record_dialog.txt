@@ -1,5 +1,17 @@
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QHBoxLayout, QLabel,
-                             QLineEdit, QComboBox, QCheckBox, QPushButton, QMessageBox, QWidget)
+from PyQt6.QtWidgets import (
+    QDialog,
+    QVBoxLayout,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QComboBox,
+    QCheckBox,
+    QPushButton,
+    QMessageBox,
+    QWidget,
+    QTextEdit
+)
 from PyQt6.QtCore import Qt
 
 import sprzet_queries as db
@@ -17,49 +29,58 @@ class ScannerLineEdit(QLineEdit):
         self.default_style = ""
 
     def keyPressEvent(self, event):
-        # Jeśli pole jest zablokowane domyślnie (np. pola "Imię" i "Nazwisko"), nie ingeruj.
         if self.isReadOnly() and not self.is_locked_by_scanner:
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                event.accept()
+                return
             super().keyPressEvent(event)
             return
 
-        # Jeśli pole zostało poprawnie zeskanowane i zablokowane
         if self.is_locked_by_scanner:
-            # Wciśnięcie Backspace lub Delete resetuje pole i zdejmuje blokadę
             if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
                 self.clear()
                 self.is_locked_by_scanner = False
                 self.setReadOnly(False)
                 self.setStyleSheet(self.default_style)
+                return
+            elif event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                event.accept()
+                return
             else:
-                # Ignoruj wszelkie inne próby wpisania tekstu
                 event.ignore()
-            return
+                return
 
-        # Pozwól na normalne wpisywanie tekstu z klawiatury
-        super().keyPressEvent(event)
-
-        # Jeśli wciśnięto Enter (skaner skończył wpisywać i wysłał sygnał końca)
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if self.text().strip():
-                # Zapisz domyślny styl, aby móc do niego wrócić
                 self.default_style = self.styleSheet()
-
-                # Zablokuj pole i ustaw zielone tło jako potwierdzenie
                 self.is_locked_by_scanner = True
                 self.setReadOnly(True)
-                self.setStyleSheet("background-color: #d4edda; color: black; border: 1px solid #28a745;")
-
-                # Automatycznie przeskocz do następnego elementu w oknie
+                self.setStyleSheet(
+                    "background-color: #d4edda; color: black; border: 1px solid #28a745;"
+                )
                 self.focusNextChild()
+            event.accept()
+            return
+
+        super().keyPressEvent(event)
 
 
 class RecordDialog(QDialog):
-    def __init__(self, parent, title: str, fields_config: list[dict], table_name: str,
-                 unique_columns: list[str], on_save_callback, record_id: int = None, initial_data: dict = None):
+    def __init__(
+            self,
+            parent,
+            title: str,
+            fields_config: list[dict],
+            table_name: str,
+            unique_columns: list[str],
+            on_save_callback,
+            record_id: int = None,
+            initial_data: dict = None
+    ):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setModal(True)
-        self.setFixedSize(480, 560)
+        self.setFixedSize(440, 540)
 
         self.table_name = table_name
         self.unique_columns = unique_columns
@@ -86,18 +107,25 @@ class RecordDialog(QDialog):
         self._build_ui(fields_config)
 
     def _build_ui(self, fields_config):
-        layout = QVBoxLayout(self)
+        main_layout = QVBoxLayout(self)
+
         form_layout = QFormLayout()
+        form_layout.setSpacing(8)
+        form_layout.setContentsMargins(0, 0, 0, 0)
+        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form_layout.setFormAlignment(Qt.AlignmentFlag.AlignTop)
+        form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
 
         for config in fields_config:
-            db_col = config.get('db_col', config.get('label'))
-            label_text = config['label']
+            db_col = config.get("db_col", config.get("label"))
+            label_text = config["label"]
             init_val = self.initial_data.get(db_col, "")
 
-            if config['type'] == 'dropdown':
+            if config["type"] == "dropdown":
                 widget = QComboBox()
-                vals = config.get('values', ["Brak"])
-                if not vals: vals = ["Brak"]
+                vals = config.get("values", ["Brak"])
+                if not vals:
+                    vals = ["Brak"]
                 widget.addItems([str(v) for v in vals])
 
                 if init_val:
@@ -107,85 +135,174 @@ class RecordDialog(QDialog):
                     else:
                         widget.insertItem(0, str(init_val))
                         widget.setCurrentIndex(0)
-                self.entries[db_col] = widget
 
-            elif config['type'] == 'checkbox':
+                self.entries[db_col] = widget
+                form_layout.addRow(QLabel(label_text), widget)
+                continue
+
+            if config["type"] == "checkbox":
                 widget = QCheckBox()
+                widget.setCursor(Qt.CursorShape.PointingHandCursor)
+                widget.setText("")
+
                 if str(init_val).lower() == "tak" or str(init_val) == "1":
                     widget.setChecked(True)
+
+                # --- ZMODYFIKOWANE STYLE ---
+                widget.setStyleSheet("""
+                                QCheckBox {
+                                    background-color: white;   /* <-- Zmiana na białe tło */
+                                    border: 1px solid #a0a0a0; /* <-- Delikatna ramka */
+                                    spacing: 0px;
+                                    padding: 0px;
+                                    margin: 0px;
+                                }
+                                QCheckBox::indicator {
+                                    width: 20px;
+                                    height: 20px;
+                                }
+                            """)
+
                 self.entries[db_col] = widget
 
-            else:
-                # Używamy naszej inteligentnej klasy obsługującej skaner!
-                widget = ScannerLineEdit()
-                if init_val:
-                    widget.setText(str(init_val))
+                checkbox_container = QWidget()
+                checkbox_layout = QHBoxLayout(checkbox_container)
+                checkbox_layout.setContentsMargins(0, 0, 0, 0)
+                checkbox_layout.setSpacing(0)
+                checkbox_layout.addWidget(widget, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                checkbox_layout.addStretch()
 
-                if config.get('readonly'):
+                form_layout.addRow(QLabel(label_text), checkbox_container)
+                continue
+
+            # --- NOWY BLOK DLA POLA UWAGI ---
+            if db_col == "UWAGI":
+                widget = QTextEdit()
+                if init_val:
+                    widget.setPlainText(str(init_val))
+
+                if config.get("readonly"):
                     widget.setReadOnly(True)
                     widget.setStyleSheet("background-color: #e0e0e0; color: #555;")
+                else:
+                    # --- DODANE: wymuszenie białego tła i ramki ---
+                    widget.setStyleSheet("background-color: white; border: 1px solid #a0a0a0;")
+
+                # Ustawienie sztywnej wysokości
+                widget.setFixedHeight(70)
 
                 self.entries[db_col] = widget
+                form_layout.addRow(QLabel(label_text), widget)
+                continue
 
-                # Obsługa szukania pracownika po wpisaniu Nr Kadrowego
-                if db_col == "NR KADROWY" and self.table_name != "mSPRZET_KONTA_UZYTKOWNIKOW":
-                    widget.editingFinished.connect(self._validate_user)
+            widget = ScannerLineEdit()
+            if init_val:
+                widget.setText(str(init_val))
 
-                    container = QWidget()
-                    h_layout = QHBoxLayout(container)
-                    h_layout.setContentsMargins(0, 0, 0, 0)
-                    h_layout.setSpacing(5)
-                    h_layout.addWidget(widget)
+            if config.get("readonly"):
+                widget.setReadOnly(True)
+                widget.setStyleSheet("background-color: #e0e0e0; color: #555;")
 
-                    search_btn = QPushButton("🔍")
-                    search_btn.setToolTip("Wyszukaj użytkownika z listy")
-                    search_btn.setFixedWidth(35)
-                    search_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-                    search_btn.clicked.connect(self._open_search_user)
-                    h_layout.addWidget(search_btn)
+            self.entries[db_col] = widget
 
-                    form_layout.addRow(QLabel(label_text), container)
-                    continue
+            if db_col == "NR KADROWY" and self.table_name != "mSPRZET_KONTA_UZYTKOWNIKOW":
+                widget.editingFinished.connect(self._validate_user)
+
+                container = QWidget()
+                h_layout = QHBoxLayout(container)
+                h_layout.setContentsMargins(0, 0, 0, 0)
+                h_layout.setSpacing(4)
+
+                h_layout.addWidget(widget)
+
+                search_btn = QPushButton("🔍")
+                search_btn.setToolTip("Wyszukaj użytkownika z listy")
+                search_btn.setFixedWidth(32)
+                search_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                search_btn.setAutoDefault(False)
+                search_btn.setDefault(False)
+                search_btn.clicked.connect(self._open_search_user)
+                h_layout.addWidget(search_btn)
+
+                clear_btn = QPushButton("✖")
+                clear_btn.setToolTip("Wyczyść numer kadrowy i powiązanego użytkownika")
+                clear_btn.setFixedWidth(32)
+                clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                clear_btn.setAutoDefault(False)
+                clear_btn.setDefault(False)
+                clear_btn.clicked.connect(self._clear_user_selection)
+                h_layout.addWidget(clear_btn)
+
+                form_layout.addRow(QLabel(label_text), container)
+                continue
 
             form_layout.addRow(QLabel(label_text), widget)
 
-        layout.addLayout(form_layout)
+        main_layout.addLayout(form_layout)
+        main_layout.addStretch()
 
         btn_text = "Zapisz" if self.record_id else "Dodaj"
         save_btn = QPushButton(btn_text)
-        save_btn.setStyleSheet("background-color: lightgreen; font-weight: bold; padding: 8px;")
+        save_btn.setStyleSheet("font-weight: bold; padding: 8px;")
         save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        save_btn.setAutoDefault(False)
+        save_btn.setDefault(False)
         save_btn.clicked.connect(self._save_record)
-        layout.addWidget(save_btn)
+        main_layout.addWidget(save_btn)
 
     def _open_search_user(self):
-        if hasattr(self.parent(), 'search_user_for_dialog'):
+        if hasattr(self.parent(), "search_user_for_dialog"):
             user_data = self.parent().search_user_for_dialog()
             if user_data:
-                self.entries['NR KADROWY'].setText(str(user_data.get('NR KADROWY', '')))
+                self.entries["NR KADROWY"].setText(str(user_data.get("NR KADROWY", "")))
                 self._validate_user()
 
+    def _clear_user_selection(self):
+        if "NR KADROWY" in self.entries:
+            self.entries["NR KADROWY"].clear()
+
+        if "IMIE" in self.entries:
+            self.entries["IMIE"].clear()
+
+        if "NAZWISKO" in self.entries:
+            self.entries["NAZWISKO"].clear()
+
+        nr_widget = self.entries.get("NR KADROWY")
+        if isinstance(nr_widget, ScannerLineEdit):
+            nr_widget.is_locked_by_scanner = False
+            nr_widget.setReadOnly(False)
+            nr_widget.setStyleSheet(nr_widget.default_style)
+
+        self.current_user_id = None
+
     def _validate_user(self):
-        nr = self.entries['NR KADROWY'].text().strip()
+        nr = self.entries["NR KADROWY"].text().strip()
 
         if not nr:
-            if 'IMIE' in self.entries: self.entries['IMIE'].clear()
-            if 'NAZWISKO' in self.entries: self.entries['NAZWISKO'].clear()
+            if "IMIE" in self.entries:
+                self.entries["IMIE"].clear()
+            if "NAZWISKO" in self.entries:
+                self.entries["NAZWISKO"].clear()
             self.current_user_id = None
             return
 
         user = db.get_user_by_nr_kadrowy(nr)
         if user:
-            if 'IMIE' in self.entries: self.entries['IMIE'].setText(user['IMIE'])
-            if 'NAZWISKO' in self.entries: self.entries['NAZWISKO'].setText(user['NAZWISKO'])
-            self.current_user_id = user['ID_UZYTKOWNIKA']
+            if "IMIE" in self.entries:
+                self.entries["IMIE"].setText(user["IMIE"])
+            if "NAZWISKO" in self.entries:
+                self.entries["NAZWISKO"].setText(user["NAZWISKO"])
+            self.current_user_id = user["ID_UZYTKOWNIKA"]
         else:
-            if 'IMIE' in self.entries: self.entries['IMIE'].setText("NIE ZNALEZIONO")
-            if 'NAZWISKO' in self.entries: self.entries['NAZWISKO'].setText("NIE ZNALEZIONO")
+            if "IMIE" in self.entries:
+                self.entries["IMIE"].setText("NIE ZNALEZIONO")
+            if "NAZWISKO" in self.entries:
+                self.entries["NAZWISKO"].setText("NIE ZNALEZIONO")
             self.current_user_id = None
 
     def _save_record(self):
         new_values = {}
+
         for db_col, widget in self.entries.items():
             if self.table_name != "mSPRZET_KONTA_UZYTKOWNIKOW" and db_col in ["NR KADROWY", "IMIE", "NAZWISKO"]:
                 continue
@@ -194,22 +311,28 @@ class RecordDialog(QDialog):
                 new_values[db_col] = 1 if widget.isChecked() else 0
             elif isinstance(widget, QComboBox):
                 new_values[db_col] = widget.currentText()
+            elif isinstance(widget, QTextEdit):  # Zmodyfikowane by obsłużyć wielowierszowe pole
+                new_values[db_col] = widget.toPlainText().strip()
             elif isinstance(widget, ScannerLineEdit):
                 new_values[db_col] = widget.text().strip()
 
         if self.table_name != "mSPRZET_KONTA_UZYTKOWNIKOW" and "NR KADROWY" in self.entries:
-            nr = self.entries['NR KADROWY'].text().strip()
+            nr = self.entries["NR KADROWY"].text().strip()
             if nr and not self.current_user_id:
                 QMessageBox.warning(self, "Błąd walidacji", "Podano nieprawidłowy Numer Kadrowy.")
                 return
-            new_values['ID_UZYTKOWNIKA'] = self.current_user_id if nr else None
+            new_values["ID_UZYTKOWNIKA"] = self.current_user_id if nr else None
 
         try:
             if self.unique_columns and not self.record_id:
                 conditions = [(col, new_values.get(col)) for col in self.unique_columns if col in new_values]
                 if db.check_duplicate(self.table_name, conditions):
                     cols_str = ", ".join(self.unique_columns)
-                    QMessageBox.warning(self, "Błąd", f"Rekord z duplikatem w polach ({cols_str}) już istnieje.")
+                    QMessageBox.warning(
+                        self,
+                        "Błąd",
+                        f"Rekord z duplikatem w polach ({cols_str}) już istnieje."
+                    )
                     return
 
             if self.record_id:

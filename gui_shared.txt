@@ -17,69 +17,96 @@ class NumericTableWidgetItem(QTableWidgetItem):
             return self.text() < other.text()
 
 DISPLAY_NAMES = {
-    "NR KADROWY": "NUMER\nKADROWY",
-    "IMIE": "IMIĘ",
-    "NAZWISKO": "NAZWISKO",
-    "RODZAJ ZATRUDNIENIA": "RODZAJ\nZATRUDNIENIA",
-    "LOKALIZACJA": "LOKALIZACJA",
-    "ID_UZYTKOWNIKA": "ID",
-    "STATUS": "STATUS",
-    "NR SRODKA TRWALEGO": "NR ŚRODKA\nTRWAŁEGO",
-    "NAZWA LAPTOPA": "NAZWA\nLAPTOPA",
-    "NR SERYJNY": "NUMER\nSERYJNY",
-    "MODEL": "MODEL",
-    "NR SDJ": "NUMER SDJ",
-    "UWAGI": "UWAGI",
-    "ID": "ID",
-    "IMEI": "IMEI",
-    "LADOWARKA": "ŁADOWARKA",
-    "KABEL USB C": "KABEL\nUSB C",
-    "LADOWARKA INDUKCYJNA": "ŁADOWARKA\nINDUKCYJNA",
-    "PRZEJSCIOWKA DO TELEFONU": "PRZEJŚCIÓWKA\nDO TELEFONU",
-    "ETUI": "ETUI",
-    "NR TELEFONU": "NUMER\nTELEFONU",
-    "NR SIM": "NUMER SIM",
-    "OPERATOR": "OPERATOR",
-    # --- NOWE NAZWY DLA HISTORII GLOBALNEJ ---
-    "KATEGORIA": "KATEGORIA",
-    "ID_REKORDU": "ID REKORDU",
-    "OPERACJA": "OPERACJA",
-    "DATA ZMIANY": "DATA ZMIANY",
-    "AUTOR ZMIANY": "AUTOR ZMIANY"
+"NR KADROWY": "NR KADROWY",
+"IMIE": "IMIĘ",
+"NAZWISKO": "NAZWISKO",
+"RODZAJ ZATRUDNIENIA": "RODZAJ ZATRUDNIENIA",
+"LOKALIZACJA": "LOKALIZACJA",
+"ID_UZYTKOWNIKA": "ID",
+"STATUS": "STATUS",
+"NR SRODKA TRWALEGO": "NR ŚRODKA TRWAŁEGO",
+"NAZWA LAPTOPA": "NAZWA LAPTOPA",
+"NR SERYJNY": "NR SERYJNY",
+"MODEL": "MODEL",
+"NR SDJ": "NR SDJ",
+"UWAGI": "UWAGI",
+"ID": "ID",
+"IMEI": "IMEI",
+"LADOWARKA": "ŁADOWARKA",
+"KABEL USB C": "KABEL USB C",
+"LADOWARKA INDUKCYJNA": "ŁADOWARKA IND",
+"PRZEJSCIOWKA DO TELEFONU": "PRZEJŚCIÓWKA",
+"ETUI": "ETUI",
+"NR TELEFONU": "NR TELEFONU",
+"NR SIM": "NR SIM",
+"OPERATOR": "OPERATOR",
+# --- NOWE NAZWY DLA HISTORII GLOBALNEJ ---
+"KATEGORIA": "KATEGORIA",
+"ID_REKORDU": "ID REKORDU",
+"OPERACJA": "OPERACJA",
+"DATA ZMIANY": "DATA ZMIANY",
+"AUTOR ZMIANY": "AUTOR ZMIANY"
 }
 
+# W gui_shared.py - Zaktualizowany styl dla bardziej "kompaktowego" wyglądu
 GLOBAL_STYLE = """
     QWidget {
-        background-color: #f0f0f0;
+        background-color: #e4e4e4; /* Szary kolor tła głównego (na górze) */
         color: #000000;
-        font-family: Arial;
-        font-size: 10pt;
+        font-family: "Segoe UI", Arial, sans-serif;
+        font-size: 8pt;
+    }
+    QWidget#topTabsFrame {
+        background-color: white; /* Tło paska z zakładkami na biało */
+    }
+    QWidget#rightPanelContainer, QWidget#rightPanel, QScrollArea#rightPanelScroll {
+    background-color: #d1ebfa; /* Jasnoniebieski tylko dla prawego panelu */
+    border: none;
     }
     QLineEdit, QComboBox, QCheckBox {
         background-color: white;
         color: black;
         border: 1px solid #a0a0a0;
-        padding: 3px;
+        padding: 2px;
     }
     QPushButton {
-        background-color: #e1e1e1;
+        background-color: #ffffff; /* Zmieniono z szarego na biały */
         color: black;
-        border: 1px solid #adadad;
-        padding: 6px;
-        border-radius: 4px;
+        border-style: outset;
+        border-width: 2px;
+        border-color: #ffffff #888888 #888888 #ffffff;
+        padding: 4px 8px;
     }
     QPushButton:hover {
-        background-color: #d5d5d5;
+        background-color: #f4f4f4; /* Bardzo delikatny odcień przy najechaniu myszką */
+    }
+    QPushButton:pressed {
+        border-style: inset;
+        border-color: #888888 #ffffff #ffffff #888888;
+        background-color: #e8e8e8;
+        padding-top: 5px;
+        padding-left: 9px;
+        padding-bottom: 3px;
+        padding-right: 7px;
     }
     QPushButton#activeTab {
-        background-color: #0078D7;
-        color: white;
+        background-color: #d1ebfa;
+        color: black;
         font-weight: bold;
-        border: 2px solid #005a9e;
-        border-radius: 4px;
+        border-style: outset;
+        border-width: 2px;
+        border-color: #ffffff #7a9eb1 #7a9eb1 #ffffff;
+    }
+    QPushButton#activeTab:pressed {
+        border-style: inset;
+        border-color: #7a9eb1 #ffffff #ffffff #7a9eb1;
+        padding-top: 5px;
+        padding-left: 9px;
+        padding-bottom: 3px;
+        padding-right: 7px;
     }
     QGroupBox {
-        background-color: white;
+        background-color: transparent;
         border: 1px solid #b0b0b0;
         margin-top: 15px;
         font-weight: bold;
@@ -91,55 +118,42 @@ GLOBAL_STYLE = """
         color: black;
         background: transparent;
     }
+    /* --- CAŁKOWITY BRAK OBRAMOWAŃ I LINII W TABELACH --- */
     QTableView, QTableWidget { 
         background-color: white; 
-        alternate-background-color: #f2f6fa; 
+        alternate-background-color: white;
         color: black; 
-        gridline-color: #d0d0d0;
+        gridline-color: transparent; /* Ukrywa wewnętrzne linie siatki między komórkami */
         outline: 0; 
-        border: 1px solid #c0c0c0;
+        border: none;               /* Ukrywa zewnętrzną ramkę tabeli */
     }
     QTableView::item:selected, QTableWidget::item:selected {
         background-color: #0078D7;
         color: white;
     }
-    QTableView::item:selected:!active, QTableWidget::item:selected:!active {
-        background-color: #0078D7;
-        color: white;
-    }
+    
+    /* --- USUNIĘCIE LINII I OBRAMOWAŃ Z NAGŁÓWKÓW --- */
     QHeaderView::section { 
-        background-color: #f0f0f0; 
+        background-color: white; 
         color: black; 
-        font-size: 8pt; 
-        font-weight: bold; 
-        border: none; 
-        border-bottom: 2px solid #c0c0c0; 
-        border-right: 1px solid #e0e0e0; 
-        padding: 2px; 
+        font-weight: normal; 
+        border: none;               /* Usuwa wszelkie linie wokół sekcji nagłówka */
+        padding: 4px;  
     }
     QScrollArea {
         border: none;
-        background-color: #f0f0f0;
+        background-color: transparent;
     }
 """
 
-class BackgroundWidget(QWidget):
-    def __init__(self, parent_app=None):
-        super().__init__()
-        self.parent_app = parent_app
-
-    def mousePressEvent(self, event):
-        if self.parent_app and hasattr(self.parent_app, 'clear_all_selections'):
-            self.parent_app.clear_all_selections()
-        super().mousePressEvent(event)
 
 class InteractiveTableWidget(QTableWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        font = QFont("Arial", 8, QFont.Weight.Bold)
+        font = QFont("Segoe UI", 8, QFont.Weight.Normal)
         self.horizontalHeader().setFont(font)
-        self.horizontalHeader().setMinimumHeight(32)
-        self.verticalHeader().setDefaultSectionSize(25)
+        self.horizontalHeader().setMinimumHeight(22)
+        self.verticalHeader().setDefaultSectionSize(20)  # Kompaktowy wiersz
 
     def mousePressEvent(self, event):
         item = self.itemAt(event.pos())
@@ -154,16 +168,28 @@ class InteractiveTableWidget(QTableWidget):
 class InteractiveTableView(QTableView):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        font = QFont("Arial", 8, QFont.Weight.Bold)
+        font = QFont("Segoe UI", 8, QFont.Weight.Normal)
         self.horizontalHeader().setFont(font)
-        self.horizontalHeader().setMinimumHeight(32)
-        self.verticalHeader().setDefaultSectionSize(25)
+        self.horizontalHeader().setMinimumHeight(22)
+        self.verticalHeader().setDefaultSectionSize(20)  # Kompaktowy wiersz
 
     def mousePressEvent(self, event):
         item = self.indexAt(event.pos())
         if not item.isValid():
             self.clearSelection()
             self.clearFocus()
+        super().mousePressEvent(event)
+
+class BackgroundWidget(QWidget):
+    def __init__(self, parent_app=None):
+        super().__init__()
+        self.parent_app = parent_app
+
+    def mousePressEvent(self, event):
+        # Sprawdź, czy kliknięto bezpośrednio w ten widget, a nie w jego dziecko
+        if self.parent_app and self.childAt(event.pos()) is None:
+            if hasattr(self.parent_app, 'clear_all_selections'):
+                self.parent_app.clear_all_selections()
         super().mousePressEvent(event)
 
 class DateDialog(QDialog):
@@ -392,10 +418,12 @@ class DataTableModel(QAbstractTableModel):
     def data(self, index, role):
         if not index.isValid():
             return None
-        # --- ZMIANA: Obsługa ToolTip (pokazywania całego tekstu przy ucięciu) ---
+
         if role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.ToolTipRole):
             val = self._data[index.row()][index.column()]
-            return str(val) if val is not None else ""
+            if val is None or str(val).strip() == "":
+                return "None"
+            return str(val)
         elif role == Qt.ItemDataRole.TextAlignmentRole:
             return Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         return None
