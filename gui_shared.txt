@@ -51,16 +51,16 @@ DISPLAY_NAMES = {
 # W gui_shared.py - Zaktualizowany styl dla bardziej "kompaktowego" wyglądu
 GLOBAL_STYLE = """
     QWidget {
-        background-color: #e4e4e4; /* Szary kolor tła głównego (na górze) */
+        background-color: #d3d3d3; /* Szary kolor tła głównego (na górze) */
         color: #000000;
         font-family: "Segoe UI", Arial, sans-serif;
-        font-size: 8pt;
+        font-size: 9pt;
     }
     QWidget#topTabsFrame {
         background-color: white; /* Tło paska z zakładkami na biało */
     }
     QWidget#rightPanelContainer, QWidget#rightPanel, QScrollArea#rightPanelScroll {
-    background-color: #d1ebfa; /* Jasnoniebieski tylko dla prawego panelu */
+    background-color: #add8e6; /* Jasnoniebieski tylko dla prawego panelu */
     border: none;
     }
     QLineEdit, QComboBox, QCheckBox {
@@ -90,7 +90,7 @@ GLOBAL_STYLE = """
         padding-right: 7px;
     }
     QPushButton#activeTab {
-        background-color: #d1ebfa;
+        background-color: #add8e6;
         color: black;
         font-weight: bold;
         border-style: outset;
@@ -125,7 +125,7 @@ GLOBAL_STYLE = """
         color: black; 
         gridline-color: transparent; /* Ukrywa wewnętrzne linie siatki między komórkami */
         outline: 0; 
-        border: none;               /* Ukrywa zewnętrzną ramkę tabeli */
+        border: 1px solid #a0a0a0;
     }
     QTableView::item:selected, QTableWidget::item:selected {
         background-color: #0078D7;
@@ -137,8 +137,15 @@ GLOBAL_STYLE = """
         background-color: white; 
         color: black; 
         font-weight: normal; 
-        border: none;               /* Usuwa wszelkie linie wokół sekcji nagłówka */
-        padding: 4px;  
+        border: none;
+        border-right: 1px solid #e9e9e9;  /* Dodaje pionową linię separatora z prawej strony */
+       
+        
+        padding: 4px; 
+    }
+    /* --- UKRYCIE OSTATNIEJ LINII Z PRAWEJ STRONY --- */
+    QHeaderView::section:last {
+        border-right: none;               /* Usuwa linię z krawędzi ostatniej kolumny */
     }
     QScrollArea {
         border: none;
@@ -235,6 +242,7 @@ class OswiadczenieDateDialog(QDialog):
 
         self.calendar = QCalendarWidget(self)
         self.calendar.setGridVisible(True)
+        self.calendar.setStyleSheet("QTableView { gridline-color: #a0a0a0; }")
         self.calendar.clicked.connect(self.accept)
         layout.addWidget(self.calendar)
 

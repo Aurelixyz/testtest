@@ -65,7 +65,7 @@ class ImportInfoDialog(QDialog):
         btn_layout = QHBoxLayout()
 
         btn_template = QPushButton("Pobierz szablon")
-        btn_template.setStyleSheet("background-color: #ffdcb8; font-weight: bold;")
+        btn_template.setStyleSheet("font-weight: bold;")
         btn_template.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_template.clicked.connect(self._generate_template)
 
@@ -74,7 +74,7 @@ class ImportInfoDialog(QDialog):
         btn_cancel.clicked.connect(self.reject)
 
         btn_import = QPushButton("Wskaż plik Excel")
-        btn_import.setStyleSheet("background-color: lightblue; font-weight: bold;")
+        btn_import.setStyleSheet("font-weight: bold;")
         btn_import.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_import.clicked.connect(self.accept)
 
@@ -153,7 +153,7 @@ class GenericExcelImportPreviewDialog(QDialog):
         self.btn_cancel.clicked.connect(self.reject)
 
         self.btn_import = QPushButton("Zatwierdź i Importuj")
-        self.btn_import.setStyleSheet("background-color: lightgreen; font-weight: bold;")
+        self.btn_import.setStyleSheet("background-color: lightgray; color: gray;")
         self.btn_import.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_import.clicked.connect(self.accept)
 

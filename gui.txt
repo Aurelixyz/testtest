@@ -19,7 +19,7 @@ from config import APP_ICON
 
 from gui_shared import (DISPLAY_NAMES, GLOBAL_STYLE, BackgroundWidget,
                         OswiadczenieDateDialog, SearchUserDialog, FlowLayout, InteractiveTableWidget)
-from gui_views import SectionWidget, UserEquipmentWidget
+from gui_views import SectionWidget, UserEquipmentWidget, ClickableLabel
 
 
 class Application(QMainWindow):
@@ -115,7 +115,7 @@ class Application(QMainWindow):
 
         self.top_frame = BackgroundWidget(self)
         self.top_frame.setObjectName("topTabsFrame")
-
+        self.top_frame.setContentsMargins(0, 8, 0, 0)
         top_layout = FlowLayout(self.top_frame, spacing=5)
         top_layout.setContentsMargins(0, 0, 0, 20)
 
@@ -125,7 +125,7 @@ class Application(QMainWindow):
         for btn_text in buttons_top:
             btn = QPushButton(btn_text)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setMinimumHeight(24)
+            btn.setMinimumHeight(28)
             self.tab_buttons[btn_text] = btn
             btn.clicked.connect(lambda checked, text=btn_text: self.show_frame(text))
             top_layout.addWidget(btn)
@@ -135,7 +135,7 @@ class Application(QMainWindow):
         sp = self.btn_uzytkownik_tab.sizePolicy()
         sp.setRetainSizeWhenHidden(True)
         self.btn_uzytkownik_tab.setSizePolicy(sp)
-        self.btn_uzytkownik_tab.setMinimumHeight(24)
+        self.btn_uzytkownik_tab.setMinimumHeight(28)
         self.btn_uzytkownik_tab.clicked.connect(lambda: self.show_frame("UŻYTKOWNIK"))
         self.btn_uzytkownik_tab.hide()
         top_layout.addWidget(self.btn_uzytkownik_tab)
@@ -149,7 +149,14 @@ class Application(QMainWindow):
         user_info_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)  # Równanie do lewej
 
         for db_col in ["NR KADROWY", "IMIE", "NAZWISKO", "RODZAJ ZATRUDNIENIA", "LOKALIZACJA", "ID_UZYTKOWNIKA"]:
-            val_lbl = QLabel("-")
+            # 1. Zmieniamy zwykły QLabel na ClickableLabel
+            val_lbl = ClickableLabel("-")
+
+
+            # 3. Dodajemy akcję kopiowania aktualnego tekstu po kliknięciu
+            val_lbl.on_click = lambda lbl=val_lbl: QApplication.clipboard().setText(lbl.text()) if lbl.text() not in (
+            "-", "NIE ZNALEZIONO") else None
+
             val_lbl.setStyleSheet(
                 "color: midnightblue; font-weight: bold; font-size: 12pt; background: transparent; border: none;")
             self.user_values[db_col] = val_lbl
@@ -192,7 +199,9 @@ class Application(QMainWindow):
         self.right_content.setObjectName("rightPanel")
         self.right_layout = QVBoxLayout(self.right_content)
         self.right_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.right_layout.setContentsMargins(5, 20, 0, 0)
+
+        # ZMIEŃ TĘ LINIĘ: (lewy: 15, górny: 20, prawy: 15, dolny: 0)
+        self.right_layout.setContentsMargins(15, 20, 15, 0)
 
         self.right_frame.setWidget(self.right_content)
         right_panel_outer_layout.addWidget(self.right_frame)
@@ -243,7 +252,7 @@ class Application(QMainWindow):
                 widget.deleteLater()
 
         if section == "KONTA UŻYTKOWNIKÓW":
-            btn_show_equipment = QPushButton("POKAŻ SPRZĘT UŻYTKOWNIKA")
+            btn_show_equipment = QPushButton("POKAŻ SPRZĘT")
             btn_show_equipment.setMinimumHeight(24)
             btn_show_equipment.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_show_equipment.clicked.connect(self.otworz_szczegoly_uzytkownika)
@@ -400,7 +409,7 @@ class Application(QMainWindow):
             return []
         elif section == "KONTA UŻYTKOWNIKÓW":
             return [
-                ("POKAŻ SPRZĘT UŻYTKOWNIKA", self.otworz_szczegoly_uzytkownika),
+                ("POKAŻ SPRZĘT", self.otworz_szczegoly_uzytkownika),
                 ("EDYTUJ", lambda: self.handle_edit(section)),
                 ("USUŃ", lambda: self.handle_delete(section))
             ]

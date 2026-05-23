@@ -110,7 +110,7 @@ class AssignmentDialog(QDialog):
 
         btn_layout = QHBoxLayout()
         assign_btn = QPushButton("Przypisz wybrany")
-        assign_btn.setStyleSheet("background-color: lightgreen; font-weight: bold;")
+        assign_btn.setStyleSheet("font-weight: bold;")
         assign_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         assign_btn.clicked.connect(self._assign_selected)
 

@@ -47,27 +47,29 @@ class UserEquipmentWidget(QScrollArea):
     def create_table_group(self, title, fetch_fn, user_id, cols, sec_key):
         container = QWidget()
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 15)  # Tylko dolny margines, by oddzielić tabele
+        layout.setContentsMargins(0, 0, 0, 0)  # Tylko dolny margines, by oddzielić tabele
         layout.setSpacing(0)  # 0, aby tytuł optycznie połączył się z tabelą poniżej
 
         # Tworzymy pasek tytułowy wyglądający jak połączony z tabelą nagłówek
 
-        title_label = QLabel(title.upper())
+        title_label = QLabel(title)
+
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_label.setStyleSheet("""
                     QLabel {
-                        background-color: #e4e4e4;
+                        background-color: #d3d3d3;
                         color: black;
                         font-weight: normal; /* <-- ZMIANA: usunięto pogrubienie */
-                        font-size: 10pt;
+                        font-size: 9pt;
                         border: 1px solid #a0a0a0;
                         border-bottom: none;
-                        padding: 6px;
+                        padding: 2px 6px;
                     }
                 """)
         layout.addWidget(title_label)
 
         table = InteractiveTableWidget()
+        table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         table.db_columns = cols
         table.setColumnCount(len(cols))
         table.setHorizontalHeaderLabels([DISPLAY_NAMES.get(c, c) for c in cols])
@@ -101,7 +103,7 @@ class UserEquipmentWidget(QScrollArea):
         table.setRowCount(len(rows))
         for r_idx, row in enumerate(rows):
             for c_idx, val in enumerate(row):
-                text_val = str(val) if val is not None else ""
+                text_val = str(val) if val is not None and str(val).strip() != "" else "None"
                 item = NumericTableWidgetItem(text_val)
                 item.setToolTip(text_val)
                 table.setItem(r_idx, c_idx, item)
@@ -114,7 +116,7 @@ class UserEquipmentWidget(QScrollArea):
         table.customContextMenuRequested.connect(lambda pos, t=table: self.parent_app.show_context_menu(pos, t))
         table.itemSelectionChanged.connect(lambda s="UŻYTKOWNIK": self.parent_app.update_right_buttons(s))
 
-        table.setMinimumHeight(max(70, 40 + (len(rows) * 30)))
+        table.setMinimumHeight(max(46, 26 + (len(rows) * 20)))
         layout.addWidget(table)
         self.asset_tables[sec_key] = table
         return container
@@ -150,6 +152,7 @@ class UserEquipmentWidget(QScrollArea):
                                                        "ID_UZYTKOWNIKA", "ID"], "KARTY SIM"))
 
         hbox_mon_slu = QHBoxLayout()
+        hbox_mon_slu.setContentsMargins(0, 0, 0, 0)
         hbox_mon_slu.addWidget(self.create_table_group("Monitory", db.get_monitory_uzytkownika, user_id,
                                                        ["STATUS", "NR SERYJNY", "MODEL", "NR SDJ", "UWAGI",
                                                         "ID_UZYTKOWNIKA", "ID"], "MONITORY"))
@@ -159,6 +162,7 @@ class UserEquipmentWidget(QScrollArea):
         self.layout.addLayout(hbox_mon_slu)
 
         hbox_mysz_klaw = QHBoxLayout()
+        hbox_mysz_klaw.setContentsMargins(0, 0, 0, 0)
         hbox_mysz_klaw.addWidget(self.create_table_group("Myszki", db.get_myszki_uzytkownika, user_id,
                                                          ["STATUS", "NR SDJ", "UWAGI", "ID_UZYTKOWNIKA", "ID"],
                                                          "MYSZKI"))

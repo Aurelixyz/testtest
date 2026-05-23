@@ -183,7 +183,7 @@ class RecordDialog(QDialog):
 
                 if config.get("readonly"):
                     widget.setReadOnly(True)
-                    widget.setStyleSheet("background-color: #e0e0e0; color: #555;")
+                    widget.setStyleSheet("background-color: #e0e0e0; color: black;")
                 else:
                     # --- DODANE: wymuszenie białego tła i ramki ---
                     widget.setStyleSheet("background-color: white; border: 1px solid #a0a0a0;")
@@ -201,7 +201,7 @@ class RecordDialog(QDialog):
 
             if config.get("readonly"):
                 widget.setReadOnly(True)
-                widget.setStyleSheet("background-color: #e0e0e0; color: #555;")
+                widget.setStyleSheet("background-color: #e0e0e0; color: black;")
 
             self.entries[db_col] = widget
 
