@@ -245,12 +245,14 @@ class Application(QMainWindow):
         self.update_right_buttons(section)
 
     def update_right_buttons(self, section):
+        # Czyszczenie poprzednich przycisków z prawego panelu
         while self.right_layout.count():
             item = self.right_layout.takeAt(0)
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
 
+        # === 1. PRZYCISKI GÓRNE (Dla widoków innych niż HISTORIA i UŻYTKOWNIK) ===
         if section == "KONTA UŻYTKOWNIKÓW":
             btn_show_equipment = QPushButton("POKAŻ SPRZĘT")
             btn_show_equipment.setMinimumHeight(24)
@@ -258,7 +260,6 @@ class Application(QMainWindow):
             btn_show_equipment.clicked.connect(self.otworz_szczegoly_uzytkownika)
             self.right_layout.addWidget(btn_show_equipment)
 
-        # Ukryte Dodaj/Edytuj/Usuń dla Historii oraz Szczegółów Użytkownika
         if section not in ("HISTORIA GLOBALNA", "UŻYTKOWNIK"):
             btn_add = QPushButton("DODAJ")
             btn_add.setMinimumHeight(24)
@@ -278,18 +279,13 @@ class Application(QMainWindow):
             btn_delete.clicked.connect(lambda: self.handle_delete(section))
             self.right_layout.addWidget(btn_delete)
 
-        btn_refresh = QPushButton("ODŚWIEŻ DANE")
-        btn_refresh.setMinimumHeight(24)
-        btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_refresh.clicked.connect(lambda: self.show_frame(section))
-        self.right_layout.addWidget(btn_refresh)
-
-        line_main = QFrame()
-        line_main.setFrameShape(QFrame.Shape.HLine)
-        line_main.setStyleSheet("background-color: #c0c0c0; margin: 10px 0;")
-        self.right_layout.addWidget(line_main)
-
+        # === 2. LINIA I PRZYCISKI EXCEL / HISTORIA (Dla widoków standardowych) ===
         if section != "UŻYTKOWNIK" and section != "HISTORIA GLOBALNA":
+            line_main = QFrame()
+            line_main.setFrameShape(QFrame.Shape.HLine)
+            line_main.setStyleSheet("background-color: #c0c0c0; margin: 10px 0;")
+            self.right_layout.addWidget(line_main)
+
             btn_import = QPushButton("IMPORT Z EXCELA")
             btn_import.setMinimumHeight(24)
             btn_import.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -302,21 +298,35 @@ class Application(QMainWindow):
             btn_export.clicked.connect(lambda checked, s=section: self.export_to_excel(s))
             self.right_layout.addWidget(btn_export)
 
-        if section != "HISTORIA GLOBALNA":
+        if section != "HISTORIA GLOBALNA" and section != "UŻYTKOWNIK":
             btn_history = QPushButton("HISTORIA ZMIAN")
             btn_history.setMinimumHeight(24)
             btn_history.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_history.clicked.connect(self.handle_show_history)
             self.right_layout.addWidget(btn_history)
 
+        # === 3. SEKCJA DEDYKOWANA: SZCZEGÓŁY UŻYTKOWNIKA ===
         if section == "UŻYTKOWNIK":
+            # A. Na samej górze: EDYTUJ i WYŚLIJ MAIL (teraz jako standardowe przyciski)
+            btn_edit_user_asset = QPushButton("EDYTUJ")
+            btn_edit_user_asset.setMinimumHeight(24)
+            btn_edit_user_asset.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_edit_user_asset.clicked.connect(lambda: self.handle_edit("UŻYTKOWNIK"))
+            self.right_layout.addWidget(btn_edit_user_asset)
+
+            btn3 = QPushButton("WYŚLIJ MAIL")
+            btn3.setMinimumHeight(24)
+            btn3.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn3.clicked.connect(self.generate_user_email)
+            self.right_layout.addWidget(btn3)
+
+            # Separator przed przyciskami przypisywania
             line_assign = QFrame()
             line_assign.setFrameShape(QFrame.Shape.HLine)
             line_assign.setStyleSheet("background-color: #c0c0c0; margin: 10px 0;")
             self.right_layout.addWidget(line_assign)
 
-            # TUTAJ USUNIĘTO PRZYCISK "ODPIJ SPRZĘT" - od razu przechodzimy do "PRZYPISZ..."
-
+            # B. Przyciski typu PRZYPISZ...
             assign_actions = [a for a in self._get_actions_for_section(section) if "PRZYPISZ" in a[0].upper()]
             for btn_text, callback in assign_actions:
                 btn = QPushButton(btn_text)
@@ -325,35 +335,47 @@ class Application(QMainWindow):
                 btn.clicked.connect(callback)
                 self.right_layout.addWidget(btn)
 
+            # Separator przed dokumentami
             line_docs = QFrame()
             line_docs.setFrameShape(QFrame.Shape.HLine)
             line_docs.setStyleSheet("background-color: #c0c0c0; margin: 10px 0;")
             self.right_layout.addWidget(line_docs)
 
-            # Styl dla niebieskich przycisków 3D (zgodnie z Twoim zrzutem ekranu)
-            blue_3d_style = """
-                            QPushButton { background-color: #8ad3ff; border: 2px outset #5b9dbf; }
-                            QPushButton:pressed { border: 2px inset #5b9dbf; padding-top: 5px; padding-left: 9px; padding-bottom: 3px; padding-right: 7px; }
-                        """
-
+            # C. Dokumenty: PROTOKÓŁ ODBIORU i OŚWIADCZENIE LAPTOP
             btn1 = QPushButton("PROTOKÓŁ ODBIORU")
-            btn1.setStyleSheet(blue_3d_style)
+            btn1.setMinimumHeight(24)
             btn1.setCursor(Qt.CursorShape.PointingHandCursor)
             btn1.clicked.connect(self.generuj_protokol_odbioru)
             self.right_layout.addWidget(btn1)
 
             btn2 = QPushButton("OŚWIADCZENIE LAPTOP")
-            btn2.setStyleSheet(blue_3d_style)
+            btn2.setMinimumHeight(24)
             btn2.setCursor(Qt.CursorShape.PointingHandCursor)
             btn2.clicked.connect(self.generuj_oswiadczenie_laptop)
             self.right_layout.addWidget(btn2)
 
-            btn3 = QPushButton("WYŚLIJ MAIL")
-            btn3.setStyleSheet(blue_3d_style + "margin-bottom: 15px;")
-            btn3.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn3.clicked.connect(self.generate_user_email)
-            self.right_layout.addWidget(btn3)
+            # Przycisk historii zmian dla wybranego sprzętu użytkownika
+            btn_history = QPushButton("HISTORIA ZMIAN")
+            btn_history.setMinimumHeight(24)
+            btn_history.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_history.clicked.connect(self.handle_show_history)
+            self.right_layout.addWidget(btn_history)
 
+        # === 4. DOLNA SEKCJA: ODŚWIEŻ DANE (Dla każdego widoku na samym dole) ===
+        # Generuj separator tylko wtedy, gdy NIE jesteśmy w zakładce historii globalnej
+        if section != "HISTORIA GLOBALNA":
+            line_refresh = QFrame()
+            line_refresh.setFrameShape(QFrame.Shape.HLine)
+            line_refresh.setStyleSheet("background-color: #c0c0c0; margin: 10px 0;")
+            self.right_layout.addWidget(line_refresh)
+
+        btn_refresh = QPushButton("ODŚWIEŻ DANE")
+        btn_refresh.setMinimumHeight(24)
+        btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_refresh.clicked.connect(lambda: self.show_frame(section))
+        self.right_layout.addWidget(btn_refresh)
+
+        # Wypchnięcie wszystkiego do góry, aby pusty obszar był pod przyciskiem odświeżania
         self.right_layout.addStretch()
 
     def handle_show_history(self):
@@ -647,9 +669,8 @@ class Application(QMainWindow):
                            lambda: self.user_equipment_view.load_user_assets(user_id),
                            None, initial_data)
 
-        # --- ZMIANA NAZWY PRZYCISKU NA 'Wyszukaj' ---
         btn_search = QPushButton("Wyszukaj")
-        btn_search.setStyleSheet("background-color: #ffdcb8; font-weight: bold; padding: 8px; margin-top: 10px;")
+        btn_search.setStyleSheet("font-weight: bold; padding: 8px; margin-top: 10px;")
         btn_search.setCursor(Qt.CursorShape.PointingHandCursor)
 
         def switch_to_search():

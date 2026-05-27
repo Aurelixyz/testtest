@@ -347,3 +347,8 @@ class RecordDialog(QDialog):
 
         except Exception as e:
             QMessageBox.critical(self, "Błąd zapisu", str(e))
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        from main import force_light_titlebar
+        force_light_titlebar(self)

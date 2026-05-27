@@ -125,6 +125,9 @@ class AssignmentDialog(QDialog):
     def showEvent(self, event):
         super().showEvent(event)
         QTimer.singleShot(10, self._sync_filter_widths)
+        # --- DOPISANE LINIE ---
+        from main import force_light_titlebar
+        force_light_titlebar(self)
 
     def _sync_filter_widths(self, *args):
         if not hasattr(self, 'table'): return
@@ -139,7 +142,12 @@ class AssignmentDialog(QDialog):
             self.table.setRowCount(len(self.all_data))
             for row_idx, row_data in enumerate(self.all_data):
                 for col_idx, val in enumerate(row_data):
-                    text_val = str(val) if val is not None else ""
+                    # --- ZMIANA: Jeśli wartość jest None lub pustym stringiem, wpisujemy "None" ---
+                    if val is None or str(val).strip() == "":
+                        text_val = "None"
+                    else:
+                        text_val = str(val)
+
                     item = QTableWidgetItem(text_val)
                     item.setToolTip(text_val)
                     self.table.setItem(row_idx, col_idx, item)

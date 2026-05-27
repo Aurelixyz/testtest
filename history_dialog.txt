@@ -2,6 +2,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QTableWidget,
                              QTableWidgetItem, QPushButton, QHeaderView)
 from PyQt6.QtCore import Qt
 from gui_shared import DISPLAY_NAMES, InteractiveTableWidget
+import sprzet_queries as db
 
 
 class HistoryDialog(QDialog):
@@ -13,11 +14,31 @@ class HistoryDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
+        # Sprawdzamy, czy okno zostało wywołane z poziomu zakładki użytkowników
+        is_user_section = "KONTA UŻYTKOWNIKÓW" in title.upper()
+
+        # 1. Budowanie nagłówków z filtrowaniem i mapowaniem
         headers = []
+        columns_to_hide = []  # Lista indeksów kolumn, które ukryjemy przed użytkownikiem
         op_idx = -1
+        user_id_idx = -1
+
         for i, col in enumerate(db_columns):
-            if col == "ID_Historia":
-                headers.append("ID LOGU")
+            if col in ("ID_Historia", "ID", "ID_UZYTKOWNIKA"):
+                # Zapamiętujemy nazwy, ale ukryjemy te kolumny techniczne
+                if col == "ID_Historia":
+                    headers.append("ID LOGU")
+                elif col == "ID":
+                    headers.append("ID")
+                elif col == "ID_UZYTKOWNIKA":
+                    headers.append("PRZYPISANY PRACOWNIK")
+                    user_id_idx = i
+
+                # Zawsze ukrywamy ID_Historia i ID.
+                # ID_UZYTKOWNIKA ukrywamy dodatkowo tylko wtedy, gdy jesteśmy w sekcji użytkowników
+                if col != "ID_UZYTKOWNIKA" or is_user_section:
+                    columns_to_hide.append(i)
+
             elif col == "TypZmiany":
                 headers.append("OPERACJA")
                 op_idx = i
@@ -28,7 +49,6 @@ class HistoryDialog(QDialog):
             else:
                 headers.append(DISPLAY_NAMES.get(col, col).replace("\n", " "))
 
-        # Wyszukajmy op_idx dla logów globalnych z innej nazwy kolumn
         if op_idx == -1:
             for i, h in enumerate(headers):
                 if h == "OPERACJA":
@@ -38,24 +58,31 @@ class HistoryDialog(QDialog):
         self.table.setColumnCount(len(headers))
         self.table.setHorizontalHeaderLabels(headers)
         self.table.verticalHeader().setVisible(False)
-        self.table.setAlternatingRowColors(True)
+
+        # --- ZMIANA: Wyłączenie naprzemiennych kolorów wierszy (Zebry) ---
+        self.table.setAlternatingRowColors(False)
+
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
-        for i, col in enumerate(db_columns):
-            if col in ("ID_Historia", "TypZmiany", "DataZmiany", "ID"):
-                self.table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
-
+        # Wymuszenie zachowania poprawnego zaznaczania i blokady edycji na poziomie tabeli
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
 
+        # 2. Wypełnianie tabeli danymi
         self.table.setSortingEnabled(False)
         self.table.setRowCount(len(history_data))
+
         for row_idx, row_data in enumerate(history_data):
             for col_idx, val in enumerate(row_data):
-                cell_text = str(val) if val is not None else ""
 
-                # --- ZMIANA: TŁUMACZENIE OPERACJI ---
+                # Standaryzacja wartości pustych na "None"
+                if val is None or str(val).strip() == "" or str(val).lower() == "none":
+                    cell_text = "None"
+                else:
+                    cell_text = str(val)
+
+                # A. Tłumaczenie operacji (INSERT/UPDATE/DELETE)
                 if col_idx == op_idx:
                     op_upper = cell_text.upper()
                     if op_upper == "INSERT":
@@ -65,12 +92,39 @@ class HistoryDialog(QDialog):
                     elif op_upper == "DELETE":
                         cell_text = "Usunięcie"
 
+                # B. Dynamiczna podmiana ID_UZYTKOWNIKA na Imię i Nazwisko (tylko dla sprzętu)
+                elif col_idx == user_id_idx and not is_user_section and cell_text != "None":
+                    try:
+                        user_dict = db.get_user_by_id(int(cell_text))
+                        if user_dict:
+                            cell_text = f"{user_dict.get('IMIE', '')} {user_dict.get('NAZWISKO', '')} ({user_dict.get('NR KADROWY', '')})"
+                        else:
+                            cell_text = "None"
+                    except Exception:
+                        pass
+
+                # C. Jeśli pole pracownika jest puste w tabeli sprzętowej (sprzęt był/jest w magazynie)
+                elif col_idx == user_id_idx and not is_user_section and cell_text == "None":
+                    cell_text = "W magazynie"
+
                 item = QTableWidgetItem(cell_text)
                 item.setToolTip(cell_text)
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.table.setItem(row_idx, col_idx, item)
-        self.table.setSortingEnabled(True)
 
+                # JAWNA BLOKADA EDYCJI: Komórka reaguje wyłącznie na włączenie (Enable) i zaznaczenie (Select)
+                item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+
+                self.table.setItem(row_idx, col_idx, item)
+
+        # 3. Ukrywanie zbędnych kolumn technicznych
+        for idx in columns_to_hide:
+            self.table.setColumnHidden(idx, True)
+
+        for i, col in enumerate(db_columns):
+            if col in ("DataZmiany", "TypZmiany") and i < self.table.columnCount():
+                self.table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
+
+        self.table.setSortingEnabled(True)
         layout.addWidget(self.table)
 
         btn_close = QPushButton("Zamknij podgląd")
@@ -78,3 +132,9 @@ class HistoryDialog(QDialog):
         btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_close.clicked.connect(self.accept)
         layout.addWidget(btn_close)
+
+    def showEvent(self, event):
+        """Wywoływane automatycznie przy otwarciu okna — wymusza jasny pasek tytułowy #f3f3f3."""
+        super().showEvent(event)
+        from main import force_light_titlebar
+        force_light_titlebar(self)

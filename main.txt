@@ -6,14 +6,22 @@ import ctypes
 from PyQt6.QtWidgets import QApplication
 from gui import Application
 
+
 def force_light_titlebar(window):
     try:
         hwnd = int(window.winId())
-        value = ctypes.c_int(0) # 0 = Jasny motyw, 1 = Ciemny motyw
-        # Win 11 i nowsze kompilacje Win 10 (Build 19041+)
-        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), ctypes.sizeof(value))
-        # Starsze kompilacje Win 10 (Build 17763 - 18363)
-        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 19, ctypes.byref(value), ctypes.sizeof(value))
+
+        # 1. Wymuszenie jasnego motywu systemowego dla obramowania (starsze kompilacje)
+        value_theme = ctypes.c_int(0)  # 0 = Jasny, 1 = Ciemny
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value_theme), ctypes.sizeof(value_theme))
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 19, ctypes.byref(value_theme), ctypes.sizeof(value_theme))
+
+        # 2. Ustawienie dokładnego koloru paska na #f3f3f3 (Win 11 / Win 10 Build 22000+)
+        # Format koloru w DWM to 0x00BBGGRR (odwrócony RGB) -> dla #f3f3f3 to 0x00f3f3f3
+        color_value = ctypes.c_int(0x00f3f3f3)
+        DWMWA_CAPTION_COLOR = 35
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ctypes.byref(color_value),
+                                                   ctypes.sizeof(color_value))
     except Exception:
         pass
 

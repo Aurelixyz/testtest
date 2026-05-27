@@ -659,34 +659,43 @@ def get_record_history(table_name: str, record_id: int) -> tuple[list, list]:
 
 
 def get_global_history():
-    """Pobiera skonsolidowaną historię ze wszystkich 9 tabel audytowych."""
+    """Pobiera skonsolidowaną historię ze wszystkich 9 tabel audytowych za ostatni rok."""
     query = f"""
         SELECT 'KONTA UŻYTKOWNIKÓW' AS KATEGORIA, [ID_UZYTKOWNIKA] AS ID_REKORDU, [TypZmiany] AS OPERACJA, CONVERT(varchar, [DataZmiany], 120) AS [DATA ZMIANY], [Uzytkownik] AS [AUTOR ZMIANY] 
         FROM {S}.[mSPRZET_KONTA_UZYTKOWNIKOW_Historia]
+        WHERE [DataZmiany] >= DATEADD(year, -1, GETDATE())
         UNION ALL
         SELECT 'LAPTOPY', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
         FROM {S}.[mSPRZET_LAPTOPY_Historia]
+        WHERE [DataZmiany] >= DATEADD(year, -1, GETDATE())
         UNION ALL
         SELECT 'MONITORY', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
         FROM {S}.[mSPRZET_MONITORY_Historia]
+        WHERE [DataZmiany] >= DATEADD(year, -1, GETDATE())
         UNION ALL
         SELECT 'TELEFONY', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
         FROM {S}.[mSPRZET_TELEFONY_Historia]
+        WHERE [DataZmiany] >= DATEADD(year, -1, GETDATE())
         UNION ALL
         SELECT 'SŁUCHAWKI', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
         FROM {S}.[mSPRZET_SLUCHAWKI_Historia]
+        WHERE [DataZmiany] >= DATEADD(year, -1, GETDATE())
         UNION ALL
         SELECT 'KARTY SIM', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
         FROM {S}.[mSPRZET_KARTY_SIM_Historia]
+        WHERE [DataZmiany] >= DATEADD(year, -1, GETDATE())
         UNION ALL
         SELECT 'ROUTER', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
         FROM {S}.[mSPRZET_ROUTER_Historia]
+        WHERE [DataZmiany] >= DATEADD(year, -1, GETDATE())
         UNION ALL
         SELECT 'MYSZKI', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
         FROM {S}.[mSPRZET_MYSZKI_Historia]
+        WHERE [DataZmiany] >= DATEADD(year, -1, GETDATE())
         UNION ALL
         SELECT 'KLAWIATURY', [ID], [TypZmiany], CONVERT(varchar, [DataZmiany], 120), [Uzytkownik] 
         FROM {S}.[mSPRZET_KLAWIATURY_Historia]
+        WHERE [DataZmiany] >= DATEADD(year, -1, GETDATE())
         ORDER BY [DATA ZMIANY] DESC
     """
     conn = create_connection()
@@ -694,7 +703,6 @@ def get_global_history():
         cursor = conn.cursor()
         cursor.execute(query)
 
-        # --- ZMIANA: Tłumaczenie operacji dla Historii Globalnej ---
         rows = []
         for row in cursor.fetchall():
             row_list = list(row)

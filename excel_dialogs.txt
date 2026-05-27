@@ -105,6 +105,10 @@ class ImportInfoDialog(QDialog):
             except Exception as e:
                 QMessageBox.critical(self, "Błąd", f"Nie udało się wygenerować szablonu:\n{e}")
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        from main import force_light_titlebar
+        force_light_titlebar(self)
 
 class GenericExcelImportPreviewDialog(QDialog):
     """Zunifikowany podgląd importu. Sprawdza dane sprzętu lub kont."""
@@ -230,3 +234,8 @@ class GenericExcelImportPreviewDialog(QDialog):
         else:
             self.info_lbl.setText("✔ Wszystkie rekordy są poprawne.")
             self.info_lbl.setStyleSheet("color: green; font-weight: bold; background: transparent;")
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        from main import force_light_titlebar
+        force_light_titlebar(self)

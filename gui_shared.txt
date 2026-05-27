@@ -151,6 +151,19 @@ GLOBAL_STYLE = """
         border: none;
         background-color: transparent;
     }
+    QDialog {
+        background-color: #f0f0f0;
+    }
+    QDialog QWidget {
+        background-color: transparent;
+    }
+    QDialog QLineEdit, QDialog QComboBox, QDialog QCheckBox, QDialog QTextEdit {
+        background-color: white;
+        color: black;
+    }
+    QDialog QPushButton {
+        background-color: #ffffff;
+    }
 """
 
 
@@ -370,7 +383,7 @@ class SearchUserDialog(QDialog):
         layout.addWidget(self.table)
 
         btn = QPushButton("Wybierz użytkownika")
-        btn.setStyleSheet("background-color: lightgreen; font-weight: bold; padding: 10px;")
+        btn.setStyleSheet("font-weight: bold; padding: 10px;")
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.clicked.connect(self._select_user)
         layout.addWidget(btn)
@@ -391,6 +404,12 @@ class SearchUserDialog(QDialog):
         for i, col in enumerate(self.labels):
             if col in self.filter_boxes:
                 self.filter_boxes[col].setFixedWidth(self.table.columnWidth(i))
+
+    # === WKLEJ TEN KOD TUTAJ ===
+    def showEvent(self, event):
+        super().showEvent(event)
+        from main import force_light_titlebar
+        force_light_titlebar(self)
 
     def _dynamic_search(self):
         search_values = {lbl: entry.text() for lbl, entry in self.entries.items()}
