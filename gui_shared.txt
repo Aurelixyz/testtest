@@ -8,44 +8,47 @@ from PyQt6.QtWidgets import QTableView
 from PyQt6.QtGui import QFont
 import sprzet_queries as db
 
+
 class NumericTableWidgetItem(QTableWidgetItem):
     """Klasa dziedzicząca po QTableWidgetItem, umożliwiająca numeryczne sortowanie."""
+
     def __lt__(self, other):
         try:
             return float(self.text()) < float(other.text())
         except (ValueError, TypeError):
             return self.text() < other.text()
 
+
 DISPLAY_NAMES = {
-"NR KADROWY": "NR KADROWY",
-"IMIE": "IMIĘ",
-"NAZWISKO": "NAZWISKO",
-"RODZAJ ZATRUDNIENIA": "RODZAJ ZATRUDNIENIA",
-"LOKALIZACJA": "LOKALIZACJA",
-"ID_UZYTKOWNIKA": "ID",
-"STATUS": "STATUS",
-"NR SRODKA TRWALEGO": "NR ŚRODKA TRWAŁEGO",
-"NAZWA LAPTOPA": "NAZWA LAPTOPA",
-"NR SERYJNY": "NR SERYJNY",
-"MODEL": "MODEL",
-"NR SDJ": "NR SDJ",
-"UWAGI": "UWAGI",
-"ID": "ID",
-"IMEI": "IMEI",
-"LADOWARKA": "ŁADOWARKA",
-"KABEL USB C": "KABEL USB C",
-"LADOWARKA INDUKCYJNA": "ŁADOWARKA IND",
-"PRZEJSCIOWKA DO TELEFONU": "PRZEJŚCIÓWKA",
-"ETUI": "ETUI",
-"NR TELEFONU": "NR TELEFONU",
-"NR SIM": "NR SIM",
-"OPERATOR": "OPERATOR",
-# --- NOWE NAZWY DLA HISTORII GLOBALNEJ ---
-"KATEGORIA": "KATEGORIA",
-"ID_REKORDU": "ID REKORDU",
-"OPERACJA": "OPERACJA",
-"DATA ZMIANY": "DATA ZMIANY",
-"AUTOR ZMIANY": "AUTOR ZMIANY"
+    "NR KADROWY": "NR KADROWY",
+    "IMIE": "IMIĘ",
+    "NAZWISKO": "NAZWISKO",
+    "RODZAJ ZATRUDNIENIA": "RODZAJ ZATRUDNIENIA",
+    "LOKALIZACJA": "LOKALIZACJA",
+    "ID_UZYTKOWNIKA": "ID",
+    "STATUS": "STATUS",
+    "NR SRODKA TRWALEGO": "NR ŚRODKA TRWAŁEGO",
+    "NAZWA LAPTOPA": "NAZWA LAPTOPA",
+    "NR SERYJNY": "NR SERYJNY",
+    "MODEL": "MODEL",
+    "NR SDJ": "NR SDJ",
+    "UWAGI": "UWAGI",
+    "ID": "ID",
+    "IMEI": "IMEI",
+    "LADOWARKA": "ŁADOWARKA",
+    "KABEL USB C": "KABEL USB C",
+    "LADOWARKA INDUKCYJNA": "ŁADOWARKA IND",
+    "PRZEJSCIOWKA DO TELEFONU": "PRZEJŚCIÓWKA",
+    "ETUI": "ETUI",
+    "NR TELEFONU": "NR TELEFONU",
+    "NR SIM": "NR SIM",
+    "OPERATOR": "OPERATOR",
+    # --- NOWE NAZWY DLA HISTORII GLOBALNEJ ---
+    "KATEGORIA": "KATEGORIA",
+    "ID_REKORDU": "ID REKORDU",
+    "OPERACJA": "OPERACJA",
+    "DATA ZMIANY": "DATA ZMIANY",
+    "AUTOR ZMIANY": "AUTOR ZMIANY"
 }
 
 # W gui_shared.py - Zaktualizowany styl dla bardziej "kompaktowego" wyglądu
@@ -131,7 +134,7 @@ GLOBAL_STYLE = """
         background-color: #0078D7;
         color: white;
     }
-    
+
     /* --- USUNIĘCIE LINII I OBRAMOWAŃ Z NAGŁÓWKÓW --- */
     QHeaderView::section { 
         background-color: white; 
@@ -139,8 +142,8 @@ GLOBAL_STYLE = """
         font-weight: normal; 
         border: none;
         border-right: 1px solid #e9e9e9;  /* Dodaje pionową linię separatora z prawej strony */
-       
-        
+
+
         padding: 4px; 
     }
     /* --- UKRYCIE OSTATNIEJ LINII Z PRAWEJ STRONY --- */
@@ -185,6 +188,7 @@ class InteractiveTableWidget(QTableWidget):
     def mouseMoveEvent(self, event):
         pass
 
+
 class InteractiveTableView(QTableView):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -200,6 +204,7 @@ class InteractiveTableView(QTableView):
             self.clearFocus()
         super().mousePressEvent(event)
 
+
 class BackgroundWidget(QWidget):
     def __init__(self, parent_app=None):
         super().__init__()
@@ -211,6 +216,7 @@ class BackgroundWidget(QWidget):
             if hasattr(self.parent_app, 'clear_all_selections'):
                 self.parent_app.clear_all_selections()
         super().mousePressEvent(event)
+
 
 class DateDialog(QDialog):
     def __init__(self, parent=None, title="Wybierz datę"):
@@ -243,6 +249,7 @@ class DateDialog(QDialog):
 
     def get_date(self) -> str:
         return self.calendar.selectedDate().toString("yyyy-MM-dd")
+
 
 class OswiadczenieDateDialog(QDialog):
     def __init__(self, parent=None, title="Data złożenia oświadczenia"):
@@ -310,6 +317,7 @@ class OswiadczenieDateDialog(QDialog):
 
     def get_date(self) -> str:
         return self.calendar.selectedDate().toString("yyyy-MM-dd")
+
 
 class SearchUserDialog(QDialog):
     def __init__(self, parent):
@@ -433,8 +441,10 @@ class SearchUserDialog(QDialog):
             QMessageBox.warning(self, "Błąd", "Nie wybrano użytkownika z listy.")
             return
         row = selected[0].row()
-        self.selected_user_data = {self.labels[i]: self.table.item(row, i).text() for i in range(len(self.labels)) if self.table.item(row, i)}
+        self.selected_user_data = {self.labels[i]: self.table.item(row, i).text() for i in range(len(self.labels)) if
+                                   self.table.item(row, i)}
         self.accept()
+
 
 class DataTableModel(QAbstractTableModel):
     def __init__(self, data, headers):
@@ -474,6 +484,7 @@ class DataTableModel(QAbstractTableModel):
     def get_row_data(self, row_idx):
         return self._data[row_idx]
 
+
 class MultiFilterProxyModel(QSortFilterProxyModel):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -507,6 +518,7 @@ class MultiFilterProxyModel(QSortFilterProxyModel):
             return float(left_data) < float(right_data)
         except (ValueError, TypeError):
             return str(left_data) < str(right_data)
+
 
 class FlowLayout(QLayout):
     def __init__(self, parent=None, margin=0, spacing=-1):

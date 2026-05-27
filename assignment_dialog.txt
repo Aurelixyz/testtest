@@ -176,13 +176,29 @@ class AssignmentDialog(QDialog):
             return
 
         row_idx = selected_rows[0].row()
-        record_id_item = self.table.item(row_idx, len(self.columns) - 1)
+
+        # Dynamicznie szukamy kolumny ID, zamiast zakładać, że jest ostatnia
+        id_col_idx = self.columns.index("ID")
+        record_id_item = self.table.item(row_idx, id_col_idx)
         if not record_id_item: return
-        record_id = int(record_id_item.text())
+
+        # --- POPRAWKA: Czyszczenie tekstu "None" z powrotem do typu int ---
+        try:
+            record_id = int(record_id_item.text())
+        except ValueError:
+            QMessageBox.critical(self, "Błąd", "Nieprawidłowe ID rekordu sprzętu.")
+            return
 
         user_id = self.user_data.get('ID_UZYTKOWNIKA')
-        if not user_id:
-            QMessageBox.critical(self, "Błąd", "Brak ID użytkownika.")
+        # Zabezpieczenie: jeśli user_id w interfejsie to "None" lub "-", zamień na czysty None dla SQL
+        if not user_id or str(user_id).strip() in ("-", "None", ""):
+            QMessageBox.critical(self, "Błąd", "Brak prawidłowego ID użytkownika.")
+            return
+
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            QMessageBox.critical(self, "Błąd", "ID użytkownika musi być liczbą.")
             return
 
         try:

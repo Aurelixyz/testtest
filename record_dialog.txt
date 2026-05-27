@@ -123,6 +123,14 @@ class RecordDialog(QDialog):
 
             if config["type"] == "dropdown":
                 widget = QComboBox()
+
+                # --- BEZPOŚREDNIA POPRAWKA W KODZIE DLA LISTY ROZWIJANEJ ---
+                # Wymuszamy, aby wewnętrzne menu rozwijane porzuciło natywny styl Fusion
+                from PyQt6.QtWidgets import QStyledItemDelegate
+                widget.setItemDelegate(QStyledItemDelegate())
+                widget.view().setStyleSheet("background-color: white; color: black;")
+                # ----------------------------------------------------------
+
                 vals = config.get("values", ["Brak"])
                 if not vals:
                     vals = ["Brak"]
@@ -310,18 +318,28 @@ class RecordDialog(QDialog):
             if isinstance(widget, QCheckBox):
                 new_values[db_col] = 1 if widget.isChecked() else 0
             elif isinstance(widget, QComboBox):
-                new_values[db_col] = widget.currentText()
-            elif isinstance(widget, QTextEdit):  # Zmodyfikowane by obsłużyć wielowierszowe pole
-                new_values[db_col] = widget.toPlainText().strip()
+                val = widget.currentText().strip()
+                # --- POPRAWKA ---
+                new_values[db_col] = None if val.lower() == "none" or val == "Brak" else val
+            elif isinstance(widget, QTextEdit):
+                val = widget.toPlainText().strip()
+                # --- POPRAWKA ---
+                new_values[db_col] = None if not val or val.lower() == "none" else val
             elif isinstance(widget, ScannerLineEdit):
-                new_values[db_col] = widget.text().strip()
+                val = widget.text().strip()
+                # --- POPRAWKA ---
+                new_values[db_col] = None if not val or val.lower() == "none" else val
 
         if self.table_name != "mSPRZET_KONTA_UZYTKOWNIKOW" and "NR KADROWY" in self.entries:
             nr = self.entries["NR KADROWY"].text().strip()
-            if nr and not self.current_user_id:
+            # Jeśli wpisano słowo "None" w numer kadrowy, traktuj jako puste
+            if not nr or nr.lower() == "none":
+                self.current_user_id = None
+
+            if nr and nr.lower() != "none" and not self.current_user_id:
                 QMessageBox.warning(self, "Błąd walidacji", "Podano nieprawidłowy Numer Kadrowy.")
                 return
-            new_values["ID_UZYTKOWNIKA"] = self.current_user_id if nr else None
+            new_values["ID_UZYTKOWNIKA"] = self.current_user_id if (nr and nr.lower() != "none") else None
 
         try:
             if self.unique_columns and not self.record_id:
